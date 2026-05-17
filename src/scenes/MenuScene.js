@@ -231,14 +231,14 @@ class MenuScene extends Phaser.Scene {
     this._drawHRule(0, 310, W, C.GOLD, 1);
     this._sectionLabel(W / 2, my - 2, 'SELECT  MODE');
 
-    // Two mode buttons: PVP | VS BOT
-    const btnW = 130, btnH = 26, gap = 20;
-    const totalW = btnW * 2 + gap;
+    // Three mode buttons: PVP | VS BOT | ONLINE  — centered around W/2
+    const btnW = 110, btnH = 26, gap = 16;
+    const totalW = btnW * 3 + gap * 2;
     const bx1 = W/2 - totalW/2;
     const bx2 = bx1 + btnW + gap;
+    const bx3 = bx2 + btnW + gap;
     const by  = my + 14;
 
-    const bx3 = bx2 + btnW + gap;
     this._modeBtns = [
       { g: this.add.graphics().setDepth(4), x: bx1, label: 'PVP',    mode: 'pvp'    },
       { g: this.add.graphics().setDepth(4), x: bx2, label: 'VS BOT', mode: 'bot'    },
@@ -602,9 +602,15 @@ class MenuScene extends Phaser.Scene {
     const W = this._W, H = this._H;
     const pw = 420, ph = 300, px = W/2 - pw/2, py = H/2 - ph/2;
     const group = [];
+    let   _joinKeyHandler = null;
+    let   _escHandler     = null;
 
     const addToGroup = (obj) => { group.push(obj); return obj; };
-    const destroy = () => group.forEach(o => { try { o.destroy(); } catch(_){} });
+    const destroy = () => {
+      group.forEach(o => { try { o.destroy(); } catch(_){} });
+      if (_joinKeyHandler) { this.input.keyboard.off('keydown', _joinKeyHandler); _joinKeyHandler = null; }
+      if (_escHandler)     { this.input.keyboard.off('keydown-ESC', _escHandler); _escHandler = null; }
+    };
 
     // Dim background
     addToGroup(this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.75).setDepth(200));
@@ -666,9 +672,8 @@ class MenuScene extends Phaser.Scene {
       net.host(code, () => {
         // Connected — launch game
         statusTxt.setText('Player connected!');
-        this.time.delayedCall(600, () => {
+        this.time.delayedCall(500, () => {
           destroy();
-          escKey.destroy();
           this._launchGame(charNames, net, true);
         });
       }, (err) => { statusTxt.setText(`Error: ${err}`); });
@@ -681,7 +686,7 @@ class MenuScene extends Phaser.Scene {
       statusTxt.setText('Type the 4-letter code:');
       codeTxt.setText('_ _ _ _');
 
-      const keyHandler = (e) => {
+      _joinKeyHandler = (e) => {
         if (e.key === 'Escape') return;
         if (e.key === 'Backspace') {
           typedCode = typedCode.slice(0, -1);
@@ -693,29 +698,30 @@ class MenuScene extends Phaser.Scene {
 
         if (typedCode.length === 4) {
           statusTxt.setText('Connecting...');
-          this.input.keyboard.off('keydown', keyHandler);
+          this.input.keyboard.off('keydown', _joinKeyHandler);
+          _joinKeyHandler = null;
 
           const net = new NetworkManager();
           net.join(typedCode, () => {
             statusTxt.setText('Connected!');
-            this.time.delayedCall(600, () => {
+            this.time.delayedCall(500, () => {
               destroy();
-              escKey.destroy();
               this._launchGame(charNames, net, false);
             });
-          }, (err) => {
-            statusTxt.setText(`Failed: check code and retry`);
+          }, () => {
+            statusTxt.setText('Failed — check code and try again');
             typedCode = '';
             codeTxt.setText('_ _ _ _');
-            this.input.keyboard.on('keydown', keyHandler);
+            this.input.keyboard.on('keydown', _joinKeyHandler);
           });
         }
       };
-      this.input.keyboard.on('keydown', keyHandler);
+      this.input.keyboard.on('keydown', _joinKeyHandler);
     });
 
     // ESC to cancel
-    const escKey = this.input.keyboard.once('keydown-ESC', () => { destroy(); });
+    _escHandler = () => { destroy(); };
+    this.input.keyboard.once('keydown-ESC', _escHandler);
   }
 
   // ── Drawing helpers ───────────────────────────────────────────────────────────
