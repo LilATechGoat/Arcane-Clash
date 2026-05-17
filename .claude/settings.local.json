@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($env:STABILITY_API_KEY = \"sk-rPoXEdiGhXyXbB3qHNvhGRQoeEUILxMkxPC2Y1NtIpiK7OOe\"; cd \"C:\\\\Users\\\\andre\\\\Downloads\\\\Phaser_Game\"; node generate_sprites.js Naruto)",
+      "WebFetch(domain:itch.io)",
+      "WebFetch(domain:luizmelo.itch.io)",
+      "WebFetch(domain:zzzhen-z.itch.io)",
+      "WebFetch(domain:xzany.itch.io)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\andre\\\\Downloads\\\\Phaser_Game\\\\assets\" -Recurse | Where-Object { !$_.PSIsContainer } | Select-Object FullName | Sort-Object FullName)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\andre\\\\Downloads\\\\Phaser_Game\\\\assets\" -Recurse -File | ForEach-Object { $_.FullName })",
+      "PowerShell(node -e $script)",
+      "PowerShell(New-Item *)"
+    ]
+  }
+}
