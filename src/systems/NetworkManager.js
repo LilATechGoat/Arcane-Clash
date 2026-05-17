@@ -66,8 +66,8 @@ class NetworkManager {
   _setupConn() {
     this._conn.on('data', data => {
       if (data.t === 's') {
-        // Authoritative state from host
-        this._stateCallback?.(data);
+        // Buffer state — GameScene reads it synchronously in update()
+        this.pendingState = data;
       } else {
         // Input packet from guest
         this._remotePrev  = { ...this._remoteHeld };

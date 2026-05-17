@@ -53,13 +53,7 @@ class GameScene extends Phaser.Scene {
       const remoteId = this._netIsHost ? 1 : 0;
       this.inputMgr.setNetController(remoteId, this._netMgr);
 
-      // Guest: apply authoritative state from host
-      if (!this._netIsHost) {
-        this._netMgr.onRemoteState(s => {
-          this._applyNetState(this.p1, s.p1x, s.p1y, s.p1vx, s.p1vy, s.p1d, s.p1s, s.p1f);
-          this._applyNetState(this.p2, s.p2x, s.p2y, s.p2vx, s.p2vy, s.p2d, s.p2s, s.p2f);
-        });
-      }
+      // Guest reads host state synchronously in update() — no callback needed
     }
 
     this.events.emit('gameReady', [this.p1, this.p2]);
@@ -96,8 +90,19 @@ class GameScene extends Phaser.Scene {
     if (this._mode === 'online' && this._netMgr?.isConnected) {
       const localId = this._netIsHost ? 0 : 1;
       this.inputMgr.sendNetworkInput(this._netMgr, localId);
-      // Host sends authoritative state to guest every frame
-      if (this._netIsHost) this._netMgr.sendState(this.p1, this.p2);
+
+      if (this._netIsHost) {
+        // Host: send authoritative state to guest
+        this._netMgr.sendState(this.p1, this.p2);
+      } else {
+        // Guest: apply buffered host state AFTER physics so it overrides local sim
+        const s = this._netMgr.pendingState;
+        if (s) {
+          this._netMgr.pendingState = null;
+          this._applyNetState(this.p1, s.p1x, s.p1y, s.p1vx, s.p1vy, s.p1d, s.p1s, s.p1f);
+          this._applyNetState(this.p2, s.p2x, s.p2y, s.p2vx, s.p2vy, s.p2d, s.p2s, s.p2f);
+        }
+      }
     }
     this.physicsSys.update(dt);
     this.p1.update(dt);
@@ -605,6 +610,14 @@ class GameScene extends Phaser.Scene {
     char.damage = damage;
     char.stocks = stocks;
     char.facing = facing;
+
+    // Force renderer to the authoritative position immediately
+    if (char.renderer) char.renderer.update(0, x, y, facing);
+
+    // Sync ancillary objects (shield, damage text, etc.)
+    if (char.shieldSprite)  char.shieldSprite.setPosition(x, y);
+    if (char._shieldRing)   char._shieldRing.setPosition(x, y);
+    if (char._dmgText)      char._dmgText.setPosition(x, y - GAME_CONFIG.CHAR_H / 2 - 30);
   }
 
   // ── Game over ─────────────────────────────────────────────────────────────
