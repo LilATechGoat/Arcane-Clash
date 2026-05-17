@@ -65,23 +65,47 @@ class NetworkManager {
 
   _setupConn() {
     this._conn.on('data', data => {
-      this._remotePrev  = { ...this._remoteHeld };
-      this._remoteHeld  = data.held  || {};
-      this._remoteAxisX = data.axisX ?? 0;
-      this._remoteAxisY = data.axisY ?? 0;
-      this._inputCallback?.(data);
+      if (data.t === 's') {
+        // Authoritative state from host
+        this._stateCallback?.(data);
+      } else {
+        // Input packet from guest
+        this._remotePrev  = { ...this._remoteHeld };
+        this._remoteHeld  = data.held  || {};
+        this._remoteAxisX = data.axisX ?? 0;
+        this._remoteAxisY = data.axisY ?? 0;
+        this._inputCallback?.(data);
+      }
     });
 
     this._conn.on('close', () => { this.isConnected = false; });
   }
 
-  // ── Send local inputs each frame ──────────────────────────────────────────
+  // ── Send local inputs each frame (guest → host) ───────────────────────────
 
   sendInput(axisX, axisY, held) {
     if (this._conn?.open) {
       this._conn.send({ axisX, axisY, held });
     }
   }
+
+  // ── Send authoritative game state each frame (host → guest) ──────────────
+
+  sendState(p1, p2) {
+    if (this._conn?.open) {
+      this._conn.send({
+        t: 's',
+        p1x: Math.round(p1.x), p1y: Math.round(p1.y),
+        p1vx: Math.round(p1.vel.x), p1vy: Math.round(p1.vel.y),
+        p1d: p1.damage, p1s: p1.stocks, p1f: p1.facing,
+        p2x: Math.round(p2.x), p2y: Math.round(p2.y),
+        p2vx: Math.round(p2.vel.x), p2vy: Math.round(p2.vel.y),
+        p2d: p2.damage, p2s: p2.stocks, p2f: p2.facing,
+      });
+    }
+  }
+
+  onRemoteState(cb) { this._stateCallback = cb; }
 
   // ── InputManager-compatible interface for the REMOTE player ───────────────
 

@@ -50,9 +50,16 @@ class GameScene extends Phaser.Scene {
 
     // Network mode — remote player's inputs come via NetworkManager
     if (this._mode === 'online' && this._netMgr) {
-      // Host = local P1, remote P2.  Guest = local P2, remote P1.
       const remoteId = this._netIsHost ? 1 : 0;
       this.inputMgr.setNetController(remoteId, this._netMgr);
+
+      // Guest: apply authoritative state from host
+      if (!this._netIsHost) {
+        this._netMgr.onRemoteState(s => {
+          this._applyNetState(this.p1, s.p1x, s.p1y, s.p1vx, s.p1vy, s.p1d, s.p1s, s.p1f);
+          this._applyNetState(this.p2, s.p2x, s.p2y, s.p2vx, s.p2vy, s.p2d, s.p2s, s.p2f);
+        });
+      }
     }
 
     this.events.emit('gameReady', [this.p1, this.p2]);
@@ -85,10 +92,12 @@ class GameScene extends Phaser.Scene {
     // Bot thinks before the character acts
     if (this._bot) this._bot.update(dt, this.p2, this.p1);
 
-    // Send local inputs over network
+    // Network sync
     if (this._mode === 'online' && this._netMgr?.isConnected) {
       const localId = this._netIsHost ? 0 : 1;
       this.inputMgr.sendNetworkInput(this._netMgr, localId);
+      // Host sends authoritative state to guest every frame
+      if (this._netIsHost) this._netMgr.sendState(this.p1, this.p2);
     }
     this.physicsSys.update(dt);
     this.p1.update(dt);
@@ -585,6 +594,17 @@ class GameScene extends Phaser.Scene {
   _rng() {
     this._rngState = (this._rngState * 1664525 + 1013904223) & 0xffffffff;
     return (this._rngState >>> 0) / 0xffffffff;
+  }
+
+  // ── Apply authoritative state from host (guest only) ─────────────────────
+  _applyNetState(char, x, y, vx, vy, damage, stocks, facing) {
+    char.x      = x;
+    char.y      = y;
+    char.vel.x  = vx;
+    char.vel.y  = vy;
+    char.damage = damage;
+    char.stocks = stocks;
+    char.facing = facing;
   }
 
   // ── Game over ─────────────────────────────────────────────────────────────
