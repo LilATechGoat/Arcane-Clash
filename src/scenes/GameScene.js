@@ -119,12 +119,13 @@ class GameScene extends Phaser.Scene {
         if (s) {
           this._netMgr.pendingState = null;
           s.c.forEach((cd, i) => {
-            const ch = this.players[i];
+            const ch       = this.players[i];
             if (!ch) return;
             const prevDmg  = ch.damage;
             const prevAnim = ch.renderer?.state || 'idle';
-            // Only sync animation for remote chars — local player keeps their own animation
             const isRemote = ch.playerId !== this._localSlot;
+
+            // Only sync animation for remote chars — local player keeps their own animation
             this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f, isRemote ? cd.a : null);
 
             // Hit VFX when damage increases
@@ -133,8 +134,7 @@ class GameScene extends Phaser.Scene {
               this.playHitVFX(ch.x, ch.y - 20, htype, this.players.find(p => p !== ch));
             }
 
-            // Attack VFX when a REMOTE character starts a new attack — skip local player
-            const isRemote     = ch.playerId !== this._localSlot;
+            // Attack VFX when a REMOTE character starts a new attack
             const isAttackAnim = cd.a && cd.a.startsWith('attack');
             const wasAttacking = prevAnim && prevAnim.startsWith('attack');
             if (isRemote && isAttackAnim && !wasAttacking && ch._emitKi) {
