@@ -411,6 +411,9 @@ class BaseCharacter {
 
   _updateAnimState() {
     if (!this.renderer) return;
+    // Skip local animation decisions for network-controlled remote characters —
+    // their animation is driven by the host's state sync instead.
+    if (this.input?.isRemoteControlled?.(this.playerId)) return;
 
     if (this._hitstunTimer > 0) {
       this.renderer.setState(ANIM.HURT); return;
@@ -419,7 +422,6 @@ class BaseCharacter {
       this.renderer.setState(ANIM.SHIELD); return;
     }
     if (this.isAttacking) {
-      // Keep whatever attack state was set by the attack method
       return;
     }
     if (!this.isGrounded) {

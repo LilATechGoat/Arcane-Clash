@@ -108,8 +108,9 @@ class InputManager {
 
   setBotController(playerId, bot)  { this._bots[playerId] = bot; }
   setNetController(playerId, net)  { this._net[playerId]  = net; }
-  /** Force slot to read keyboard playerId instead (for online guests). */
   setKeyboardOverride(slot, kbId)  { this._kbOverride[slot] = kbId; }
+  /** True when the player is driven by a network or bot controller (not local keyboard). */
+  isRemoteControlled(playerId)     { return !!(this._net[playerId] || this._bots[playerId]); }
 
   // Gather local held state and send over network each frame
   // Always reads keyboard 0 (WASD) since online local player uses keyboard override → 0
