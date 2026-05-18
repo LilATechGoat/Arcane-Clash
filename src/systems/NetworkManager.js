@@ -43,6 +43,23 @@ class SlotInputAdapter {
 
 // ── NetworkManager ────────────────────────────────────────────────────────────
 
+// ICE config with STUN + free TURN relay — needed for cross-network NAT traversal
+const ICE_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    // Open Relay free TURN — handles symmetric NAT where STUN alone fails
+    { urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject', credential: 'openrelayproject' },
+  ],
+};
+
 class NetworkManager {
   constructor() {
     this._peer       = null;
@@ -78,7 +95,7 @@ class NetworkManager {
     this.isHost     = true;
     this.mySlot     = 0;
     this.myCharName = charName;
-    this._peer      = new Peer(`ac-${code.toLowerCase()}`);
+    this._peer      = new Peer(`ac-${code.toLowerCase()}`, { config: ICE_CONFIG });
 
     this._peer.on('error', e => {
       onError?.(e.type === 'unavailable-id' ? 'Code taken — try another' : e.message);
@@ -140,12 +157,13 @@ class NetworkManager {
   join(code, charName, onJoined, onError) {
     this.isHost     = false;
     this.myCharName = charName;
-    this._peer      = new Peer();
+    this._peer      = new Peer(undefined, { config: ICE_CONFIG });
 
     this._peer.on('error', e => onError?.(e.message));
 
     this._peer.on('open', () => {
-      this._hostConn = this._peer.connect(`ac-${code.toLowerCase()}`);
+      // reliable:true uses TCP-like SCTP — works through more NAT/firewall configs
+      this._hostConn = this._peer.connect(`ac-${code.toLowerCase()}`, { reliable: true });
 
       this._hostConn.on('open', () => { onJoined?.(); });
 
