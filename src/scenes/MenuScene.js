@@ -713,9 +713,11 @@ class MenuScene extends Phaser.Scene {
         }
       });
       if (isHost) {
-        startBtn.setText(players.length >= 2 ? '[ START GAME ]' : 'Waiting for players...');
-        startBtn.setAlpha(players.length >= 2 ? 1.0 : 0.4);
-        startBtn.setInteractive(players.length >= 2);
+        const ready = players.length >= 2;
+        startBtn.setText(ready ? '[ START GAME ]' : 'Waiting for players...');
+        startBtn.setAlpha(ready ? 1.0 : 0.4);
+        if (ready) startBtn.setInteractive({ useHandCursor: true });
+        else startBtn.disableInteractive();
       }
     };
 
@@ -753,7 +755,11 @@ class MenuScene extends Phaser.Scene {
       lobbyNavActive = true;
 
       net.onLobbyUpdate = updatePlayerList;
-      net.onGameStart   = launchFromLobby;
+      // Host waits 400ms after broadcast so guests receive the packet first
+      net.onGameStart   = (players) => {
+        statusTxt.setText('Starting...');
+        this.time.delayedCall(400, () => launchFromLobby(players));
+      };
 
       net.host(code, charKeys[myCharIdx],
         () => { updatePlayerList(net.lobbyPlayers); },
@@ -761,7 +767,11 @@ class MenuScene extends Phaser.Scene {
       );
 
       startBtn.on('pointerdown', () => {
-        if (net.playerCount >= 2) net.startGame();
+        if (net && net.playerCount >= 2) {
+          startBtn.disableInteractive();
+          startBtn.setText('Starting...');
+          net.startGame();
+        }
       });
     });
 
