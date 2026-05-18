@@ -64,15 +64,16 @@ class SpriteAnimator {
   }
 
   // Force state — used by network sync for remote characters.
-  // Restarts if animation changed or stopped; otherwise leaves it playing.
+  // Only restarts the animation when the KEY changes (different state).
+  // Uses currentAnim.key as truth instead of isPlaying which can be unreliable.
   forceState(newState) {
     const suffix = this._stateMap[newState] || 'idle';
     const key    = `${this.charName}_${suffix}`;
-    this.state   = newState;
+    this.state    = newState;
+    this._playing = key;
 
-    const needsRestart = this._playing !== key || !this.sprite.anims?.isPlaying;
-    if (needsRestart && this.scene.anims.exists(key)) {
-      this._playing = key;
+    const curKey = this.sprite.anims?.currentAnim?.key;
+    if (curKey !== key && this.scene.anims.exists(key)) {
       this.sprite.play(key, true);
     }
   }
