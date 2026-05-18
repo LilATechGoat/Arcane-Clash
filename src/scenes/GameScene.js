@@ -648,16 +648,12 @@ class GameScene extends Phaser.Scene {
     char.stocks = stocks;
     char.facing = facing;
 
-    // Sync animation state + frame so both screens show the same pose
-    if (anim && char.renderer?.setState) {
-      char.renderer.setState(anim);
-      if (animFrame !== undefined && char.renderer.sprite?.anims?.isPlaying) {
-        try {
-          const frames = char.renderer.sprite.anims.currentAnim?.frames;
-          if (frames && animFrame < frames.length) {
-            char.renderer.sprite.anims.setCurrentFrame(frames[animFrame]);
-          }
-        } catch(_) {}
+    // Sync animation — use forceState to bypass the same-state guard
+    if (anim && char.renderer) {
+      if (char.renderer.forceState) {
+        char.renderer.forceState(anim, animFrame);
+      } else {
+        char.renderer.setState(anim);
       }
     }
 

@@ -63,6 +63,26 @@ class SpriteAnimator {
     this._play(newState);
   }
 
+  // Force state + exact frame — used by network sync to bypass the same-state guard
+  forceState(newState, frameIdx) {
+    this.state = newState;
+    const suffix = this._stateMap[newState] || 'idle';
+    const key    = `${this.charName}_${suffix}`;
+    this._playing = key;
+    if (this.scene.anims.exists(key)) {
+      this.sprite.play(key, true);
+      // Jump to the specific frame so both screens show the same pose
+      if (frameIdx !== undefined) {
+        try {
+          const anim = this.sprite.anims.currentAnim;
+          if (anim && frameIdx < anim.frames.length) {
+            this.sprite.anims.setCurrentFrame(anim.frames[frameIdx]);
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
   update(dt, x, y, facing) {
     // Position sprite so the character's feet (measured footRatio down the frame)
     // align exactly with the hitbox bottom (y + CHAR_H/2 = ground contact point).
