@@ -63,27 +63,17 @@ class SpriteAnimator {
     this._play(newState);
   }
 
-  // Force state + animation progress — used by network sync.
-  forceState(newState, animProgress) {
-    const suffix  = this._stateMap[newState] || 'idle';
-    const key     = `${this.charName}_${suffix}`;
-    const changed = this._playing !== key;
-    const stopped = !this.sprite.anims?.isPlaying;
+  // Force state — used by network sync for remote characters.
+  // Restarts if animation changed or stopped; otherwise leaves it playing.
+  forceState(newState) {
+    const suffix = this._stateMap[newState] || 'idle';
+    const key    = `${this.charName}_${suffix}`;
+    this.state   = newState;
 
-    // Restart animation when key changed OR when it finished and host is still in this state
-    if (changed || stopped) {
-      this.state    = newState;
+    const needsRestart = this._playing !== key || !this.sprite.anims?.isPlaying;
+    if (needsRestart && this.scene.anims.exists(key)) {
       this._playing = key;
-      if (this.scene.anims.exists(key)) {
-        this.sprite.play(key, true);
-      }
-    } else {
-      this.state = newState;
-    }
-
-    // Seek to same progress point as host
-    if (animProgress !== undefined && this.sprite.anims?.isPlaying) {
-      try { this.sprite.anims.setProgress(animProgress); } catch (_) {}
+      this.sprite.play(key, true);
     }
   }
 

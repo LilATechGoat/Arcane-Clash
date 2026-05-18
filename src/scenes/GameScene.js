@@ -123,7 +123,7 @@ class GameScene extends Phaser.Scene {
             if (!ch) return;
             const prevDmg  = ch.damage;
             const prevAnim = ch.renderer?.state || 'idle';
-            this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f, cd.a, cd.ap);
+            this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f, cd.a);
 
             // Hit VFX when damage increases
             if (cd.d > prevDmg && this.playHitVFX) {
@@ -652,7 +652,7 @@ class GameScene extends Phaser.Scene {
   }
 
   // ── Apply authoritative state from host (guest only) ─────────────────────
-  _applyNetState(char, x, y, vx, vy, damage, stocks, facing, anim, animFrame) {
+  _applyNetState(char, x, y, vx, vy, damage, stocks, facing, anim) {
     char.x      = x;
     char.y      = y;
     char.vel.x  = vx;
@@ -661,13 +661,10 @@ class GameScene extends Phaser.Scene {
     char.stocks = stocks;
     char.facing = facing;
 
-    // Sync animation state + progress
+    // Sync animation state
     if (anim && char.renderer) {
-      if (char.renderer.forceState) {
-        char.renderer.forceState(anim, animFrame); // animFrame is now progress 0-1
-      } else {
-        char.renderer.setState(anim);
-      }
+      if (char.renderer.forceState) char.renderer.forceState(anim);
+      else char.renderer.setState(anim);
     }
 
     // Force renderer to the authoritative position immediately
