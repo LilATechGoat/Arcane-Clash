@@ -55,13 +55,20 @@ class GameScene extends Phaser.Scene {
       this.inputMgr.setBotController(1, this._bot);
     }
 
-    // Network mode — remote players get slot adapters
+    // Network mode
     if (this._mode === 'online' && this._netMgr) {
-      playerList.forEach(p => {
-        if (p.slot !== this._localSlot) {
-          this.inputMgr.setNetController(p.slot, this._netMgr.getSlotAdapter(p.slot));
-        }
-      });
+      if (this._netIsHost) {
+        // Host: remote guests get slot adapters (host has their input data)
+        playerList.forEach(p => {
+          if (p.slot !== this._localSlot) {
+            this.inputMgr.setNetController(p.slot, this._netMgr.getSlotAdapter(p.slot));
+          }
+        });
+      } else {
+        // Guest: remote players are driven purely by host state (no input adapters needed)
+        // Local player always uses keyboard 0 (WASD) regardless of slot
+        this.inputMgr.setKeyboardOverride(this._localSlot, 0);
+      }
     }
 
     this.events.emit('gameReady', this.players);
@@ -612,8 +619,10 @@ class GameScene extends Phaser.Scene {
 
   // ── Spawn positions spread across the stage ──────────────────────────────
   _spawnPositions(n) {
-    const left = 360, right = 920;
+    // Keep well inside the main platform (x=250 to x=1030)
+    const left = 420, right = 860;
     if (n === 1) return [640];
+    if (n === 2) return [420, 860];
     return Array.from({ length:n }, (_,i) => Math.round(left + (right-left)*i/(n-1)));
   }
 

@@ -49,6 +49,8 @@ class InputManager {
     this._bots = {};
     /** Network controller keyed by playerId — override inputs when set. */
     this._net  = {};
+    /** Keyboard remapping: { slot → keyboardPlayerId } for online guests */
+    this._kbOverride = {};
 
     this._actionMap = {
       0: {
@@ -106,23 +108,31 @@ class InputManager {
 
   setBotController(playerId, bot)  { this._bots[playerId] = bot; }
   setNetController(playerId, net)  { this._net[playerId]  = net; }
+  /** Force slot to read keyboard playerId instead (for online guests). */
+  setKeyboardOverride(slot, kbId)  { this._kbOverride[slot] = kbId; }
 
   // Gather local held state and send over network each frame
+  // Always reads keyboard 0 (WASD) since online local player uses keyboard override → 0
   sendNetworkInput(net, localPlayerId) {
-    const map  = this._actionMap[localPlayerId] || {};
+    const kbId = this._kbOverride[localPlayerId] ?? localPlayerId;
+    const map  = this._actionMap[kbId] || this._actionMap[0] || {};
     const held = {};
     for (const action of Object.keys(map)) {
       held[action] = this.rawKeys[map[action]]?.isDown || false;
     }
-    const ax = this.axisX(localPlayerId);
-    const ay = this.axisY(localPlayerId);
+    // Compute axes from raw keys
+    const l = held.left || false, r = held.right || false;
+    const u = held.up   || false, d = held.down  || false;
+    const ax = (r && !l) ? 1 : (l && !r) ? -1 : 0;
+    const ay = (d && !u) ? 1 : (u && !d) ? -1 : 0;
     net.sendInput(ax, ay, held);
   }
 
   isHeld(playerId, action) {
     if (this._net[playerId])  return this._net[playerId].isHeld(action);
     if (this._bots[playerId]) return this._bots[playerId].isHeld(action);
-    const rawKey = this._actionMap[playerId]?.[action];
+    const kb     = this._kbOverride[playerId] ?? playerId;
+    const rawKey = this._actionMap[kb]?.[action];
     if (!rawKey) return false;
     return this.rawKeys[rawKey].isDown;
   }
@@ -130,9 +140,10 @@ class InputManager {
   justPressed(playerId, action) {
     if (this._net[playerId])  return this._net[playerId].justPressed(action);
     if (this._bots[playerId]) return this._bots[playerId].justPressed(action);
-    const rawKey = this._actionMap[playerId]?.[action];
+    const kb     = this._kbOverride[playerId] ?? playerId;
+    const rawKey = this._actionMap[kb]?.[action];
     if (!rawKey) return false;
-    const key  = `${playerId}_${action}`;
+    const key  = `${kb}_${action}`;
     const prev = this._prev[key] || false;
     return this.rawKeys[rawKey].isDown && !prev;
   }
@@ -140,7 +151,8 @@ class InputManager {
   consumeBuffer(playerId, action) {
     if (this._net[playerId])  return this._net[playerId].consumeBuffer(action);
     if (this._bots[playerId]) return this._bots[playerId].consumeBuffer(action);
-    const key = `${playerId}_${action}`;
+    const kb  = this._kbOverride[playerId] ?? playerId;
+    const key = `${kb}_${action}`;
     if (this._buffer[key] !== undefined) { delete this._buffer[key]; return true; }
     return false;
   }
@@ -148,8 +160,9 @@ class InputManager {
   axisX(playerId) {
     if (this._net[playerId])  return this._net[playerId].axisX();
     if (this._bots[playerId]) return this._bots[playerId].axisX();
-    const l = this.isHeld(playerId, 'left');
-    const r = this.isHeld(playerId, 'right');
+    const kb = this._kbOverride[playerId] ?? playerId;
+    const l  = this.isHeld(playerId, 'left');
+    const r  = this.isHeld(playerId, 'right');
     if (l && !r) return -1;
     if (r && !l) return  1;
     return 0;
@@ -158,8 +171,9 @@ class InputManager {
   axisY(playerId) {
     if (this._net[playerId])  return this._net[playerId].axisY();
     if (this._bots[playerId]) return this._bots[playerId].axisY();
-    const u = this.isHeld(playerId, 'up');
-    const d = this.isHeld(playerId, 'down');
+    const kb = this._kbOverride[playerId] ?? playerId;
+    const u  = this.isHeld(playerId, 'up');
+    const d  = this.isHeld(playerId, 'down');
     if (u && !d) return -1;
     if (d && !u) return  1;
     return 0;
