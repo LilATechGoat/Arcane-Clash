@@ -1,139 +1,234 @@
 /**
  * @file NetworkManager.js
- * PeerJS wrapper — host generates a 4-letter code, guest types it in.
- * Sends input state each frame; both sides run the full simulation.
+ * PeerJS wrapper supporting 2-6 players.
+ * Host accepts multiple connections; each guest gets a slot (1-5).
+ * Lobby phase syncs character picks. Game phase: host broadcasts
+ * authoritative state, guests send inputs.
  */
 
 /* global NetworkManager */
 
+// ── Per-slot input adapter — plugs into InputManager like a BotController ───
+
+class SlotInputAdapter {
+  constructor(net, slot) {
+    this._net  = net;
+    this._slot = slot;
+  }
+  axisX()  { return this._net._remoteInputs[this._slot]?.axisX  ?? 0; }
+  axisY()  { return this._net._remoteInputs[this._slot]?.axisY  ?? 0; }
+  isHeld(a) {
+    return this._net._remoteInputs[this._slot]?.held[a]  || false;
+  }
+  justPressed(a) {
+    const ri = this._net._remoteInputs[this._slot];
+    return !!(ri?.held[a] && !ri?.prev[a]);
+  }
+  consumeBuffer(a) {
+    const ri = this._net._remoteInputs[this._slot];
+    if (ri?.held[a] && !ri?.prev[a]) { ri.prev[a] = true; return true; }
+    return false;
+  }
+}
+
+// ── NetworkManager ────────────────────────────────────────────────────────────
+
 class NetworkManager {
   constructor() {
-    this._peer          = null;
-    this._conn          = null;
-    this.isHost         = false;
-    this.isConnected    = false;
-    this._inputCallback = null;
-    this._remoteHeld    = {};
-    this._remotePrev    = {};
-    this._remoteAxisX   = 0;
-    this._remoteAxisY   = 0;
+    this._peer       = null;
+    this.isHost      = false;
+    this.mySlot      = 0;
+    this.myCharName  = 'Naruto';
+
+    // Host only: map of slot → { conn, charName }
+    this._slots      = {};
+    this._nextSlot   = 1;
+    this._maxGuests  = 5;
+
+    // Guest only: connection to host
+    this._hostConn   = null;
+
+    // Shared
+    this.isConnected  = false;
+    this.lobbyPlayers = [];   // [{slot, charName, name}]
+    this.pendingState = null; // buffered game state packet
+
+    // Remote inputs by slot (host uses these for guests)
+    this._remoteInputs = {};  // { slot: {held, prev, axisX, axisY} }
+
+    // Callbacks
+    this.onLobbyUpdate = null;
+    this.onGameStart   = null;
+    this.onDisconnect  = null;
   }
 
-  // ── Host: create peer with a chosen code ──────────────────────────────────
+  // ── HOST ──────────────────────────────────────────────────────────────────
 
-  host(code, onConnected, onError) {
-    this.isHost = true;
-    const id = `ac-${code.toLowerCase()}`;
-    this._peer = new Peer(id);
+  host(code, charName, onReady, onError) {
+    this.isHost     = true;
+    this.mySlot     = 0;
+    this.myCharName = charName;
+    this._peer      = new Peer(`ac-${code.toLowerCase()}`);
 
     this._peer.on('error', e => {
       onError?.(e.type === 'unavailable-id' ? 'Code taken — try another' : e.message);
     });
 
+    this._peer.on('open', () => {
+      this._updateLobby();
+      onReady?.();
+    });
+
     this._peer.on('connection', conn => {
-      this._conn = conn;
-      this._setupConn();
+      if (Object.keys(this._slots).length >= this._maxGuests) {
+        conn.close(); return;
+      }
+      const slot = this._nextSlot++;
+      this._slots[slot]       = { conn, charName: 'Naruto' };
+      this._remoteInputs[slot] = { held:{}, prev:{}, axisX:0, axisY:0 };
+
       conn.on('open', () => {
-        this.isConnected = true;
-        onConnected?.();
+        conn.send({ t:'welcome', slot, lobby: this._buildLobby() });
+        this._updateLobby();
+      });
+
+      conn.on('data', data => {
+        if (data.t === 'char') {
+          if (this._slots[slot]) {
+            this._slots[slot].charName = data.charName;
+            this._updateLobby();
+          }
+        } else if (data.t === 'input') {
+          const ri = this._remoteInputs[slot];
+          if (ri) {
+            ri.prev  = { ...ri.held };
+            ri.held  = data.held  || {};
+            ri.axisX = data.axisX ?? 0;
+            ri.axisY = data.axisY ?? 0;
+          }
+        }
+      });
+
+      conn.on('close', () => {
+        delete this._slots[slot];
+        delete this._remoteInputs[slot];
+        this._updateLobby();
+        this.onDisconnect?.(slot);
       });
     });
   }
 
-  // ── Guest: connect to a host code ────────────────────────────────────────
+  startGame() {
+    const players = this._buildLobby();
+    this._broadcast({ t:'start', players });
+    this.isConnected = true;
+    this.onGameStart?.(players);
+  }
 
-  join(code, onConnected, onError) {
-    this.isHost = false;
-    this._peer  = new Peer();
+  // ── GUEST ─────────────────────────────────────────────────────────────────
+
+  join(code, charName, onJoined, onError) {
+    this.isHost     = false;
+    this.myCharName = charName;
+    this._peer      = new Peer();
 
     this._peer.on('error', e => onError?.(e.message));
 
     this._peer.on('open', () => {
-      this._conn = this._peer.connect(`ac-${code.toLowerCase()}`, { reliable: false });
+      this._hostConn = this._peer.connect(`ac-${code.toLowerCase()}`);
 
-      this._conn.on('open', () => {
-        this._setupConn();
-        this.isConnected = true;
-        onConnected?.();
+      this._hostConn.on('open', () => { onJoined?.(); });
+
+      this._hostConn.on('data', data => {
+        if (data.t === 'welcome') {
+          this.mySlot = data.slot;
+          this.lobbyPlayers = data.lobby;
+          this.onLobbyUpdate?.(data.lobby);
+          // Tell host our character right away
+          this._hostConn.send({ t:'char', charName: this.myCharName });
+        } else if (data.t === 'lobby') {
+          this.lobbyPlayers = data.players;
+          this.onLobbyUpdate?.(data.players);
+        } else if (data.t === 'start') {
+          this.isConnected = true;
+          this.onGameStart?.(data.players);
+        } else if (data.t === 's') {
+          this.pendingState = data;
+        }
       });
 
-      this._conn.on('error', e => onError?.(e.message));
+      this._hostConn.on('error', e => onError?.(e.message));
+      this._hostConn.on('close', () => {
+        this.isConnected = false;
+        this.onDisconnect?.(-1);
+      });
     });
   }
 
-  // ── Connection setup ──────────────────────────────────────────────────────
+  // ── Lobby: change character ───────────────────────────────────────────────
 
-  _setupConn() {
-    this._conn.on('data', data => {
-      if (data.t === 's') {
-        // Buffer state — GameScene reads it synchronously in update()
-        this.pendingState = data;
-      } else {
-        // Input packet from guest
-        this._remotePrev  = { ...this._remoteHeld };
-        this._remoteHeld  = data.held  || {};
-        this._remoteAxisX = data.axisX ?? 0;
-        this._remoteAxisY = data.axisY ?? 0;
-        this._inputCallback?.(data);
-      }
-    });
-
-    this._conn.on('close', () => { this.isConnected = false; });
+  changeChar(charName) {
+    this.myCharName = charName;
+    if (this.isHost) {
+      this._updateLobby();
+    } else if (this._hostConn?.open) {
+      this._hostConn.send({ t:'char', charName });
+    }
   }
 
-  // ── Send local inputs each frame (guest → host) ───────────────────────────
+  // ── Game phase ────────────────────────────────────────────────────────────
 
   sendInput(axisX, axisY, held) {
-    if (this._conn?.open) {
-      this._conn.send({ axisX, axisY, held });
+    if (this._hostConn?.open) {
+      this._hostConn.send({ t:'input', axisX, axisY, held });
     }
   }
 
-  // ── Send authoritative game state each frame (host → guest) ──────────────
+  sendStateToAll(chars) {
+    this._broadcast({
+      t: 's',
+      c: chars.map(ch => ({
+        x:  Math.round(ch.x),     y:  Math.round(ch.y),
+        vx: Math.round(ch.vel.x), vy: Math.round(ch.vel.y),
+        d: ch.damage, s: ch.stocks, f: ch.facing,
+      })),
+    });
+  }
 
-  sendState(p1, p2) {
-    if (this._conn?.open) {
-      this._conn.send({
-        t: 's',
-        p1x: Math.round(p1.x), p1y: Math.round(p1.y),
-        p1vx: Math.round(p1.vel.x), p1vy: Math.round(p1.vel.y),
-        p1d: p1.damage, p1s: p1.stocks, p1f: p1.facing,
-        p2x: Math.round(p2.x), p2y: Math.round(p2.y),
-        p2vx: Math.round(p2.vel.x), p2vy: Math.round(p2.vel.y),
-        p2d: p2.damage, p2s: p2.stocks, p2f: p2.facing,
-      });
+  getSlotAdapter(slot) {
+    return new SlotInputAdapter(this, slot);
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  _buildLobby() {
+    const list = [{ slot:0, charName:this.myCharName, name:'P1' }];
+    for (const [s, info] of Object.entries(this._slots)) {
+      list.push({ slot:+s, charName:info.charName, name:`P${+s+1}` });
+    }
+    return list.sort((a,b) => a.slot - b.slot);
+  }
+
+  _updateLobby() {
+    const players = this._buildLobby();
+    this.lobbyPlayers = players;
+    this.onLobbyUpdate?.(players);
+    this._broadcast({ t:'lobby', players });
+  }
+
+  _broadcast(data) {
+    for (const { conn } of Object.values(this._slots)) {
+      if (conn?.open) conn.send(data);
     }
   }
 
-  onRemoteState(cb) { this._stateCallback = cb; }
-
-  // ── InputManager-compatible interface for the REMOTE player ───────────────
-
-  axisX()  { return this._remoteAxisX; }
-  axisY()  { return this._remoteAxisY; }
-
-  isHeld(action) {
-    return this._remoteHeld[action] || false;
-  }
-
-  justPressed(action) {
-    return !!(this._remoteHeld[action] && !this._remotePrev[action]);
-  }
-
-  consumeBuffer(action) {
-    if (this._remoteHeld[action] && !this._remotePrev[action]) {
-      this._remotePrev[action] = true; // consume
-      return true;
-    }
-    return false;
-  }
-
-  onRemoteInput(cb) { this._inputCallback = cb; }
+  get playerCount() { return 1 + Object.keys(this._slots).length; }
 
   destroy() {
-    this._conn?.close();
+    for (const { conn } of Object.values(this._slots)) conn?.close();
+    this._hostConn?.close();
     this._peer?.destroy();
-    this._conn = null; this._peer = null;
+    this._slots = {}; this._hostConn = null; this._peer = null;
     this.isConnected = false;
   }
 }

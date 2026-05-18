@@ -583,145 +583,229 @@ class MenuScene extends Phaser.Scene {
     this._launchGame(charNames, null, false);
   }
 
-  _launchGame(charNames, netMgr, netIsHost) {
+  _launchGame(charNames, netMgr, netIsHost, netPlayers, localSlot) {
     this.scene.start('GameScene', {
-      p1Char:     charNames[this._p1Sel],
-      p2Char:     charNames[this._p2Sel],
-      stage:      GAME_CONFIG.STAGES[this._stageSel],
-      mode:       netMgr ? 'online' : this._mode,
-      botLevel:   this._botLevel,
-      netMgr:     netMgr,
-      netIsHost:  netIsHost,
+      p1Char:      charNames[this._p1Sel],
+      p2Char:      charNames[this._p2Sel],
+      stage:       GAME_CONFIG.STAGES[this._stageSel],
+      mode:        netMgr ? 'online' : this._mode,
+      botLevel:    this._botLevel,
+      netMgr,
+      netIsHost,
+      netPlayers:  netPlayers || null,
+      localSlot:   localSlot  ?? 0,
     });
     this.scene.launch('UIScene');
   }
 
   // ── Multiplayer lobby overlay ─────────────────────────────────────────────
 
-  _showLobby(charNames) {
+  _showLobby(allCharNames) {
     const W = this._W, H = this._H;
-    const pw = 420, ph = 300, px = W/2 - pw/2, py = H/2 - ph/2;
     const group = [];
-    let   _joinKeyHandler = null;
-    let   _escHandler     = null;
+    let _joinKH = null, _escH = null;
 
-    const addToGroup = (obj) => { group.push(obj); return obj; };
+    const add = o => { group.push(o); return o; };
     const destroy = () => {
       group.forEach(o => { try { o.destroy(); } catch(_){} });
-      if (_joinKeyHandler) { this.input.keyboard.off('keydown', _joinKeyHandler); _joinKeyHandler = null; }
-      if (_escHandler)     { this.input.keyboard.off('keydown-ESC', _escHandler); _escHandler = null; }
+      if (_joinKH) { this.input.keyboard.off('keydown', _joinKH); _joinKH = null; }
+      if (_escH)   { this.input.keyboard.off('keydown-ESC', _escH); _escH = null; }
     };
 
-    // Dim background
-    addToGroup(this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.75).setDepth(200));
+    const makeCode = () => {
+      const ch = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+      return Array.from({length:4}, () => ch[Math.floor(Math.random()*ch.length)]).join('');
+    };
+
+    // Full overlay
+    add(this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.80).setDepth(200));
 
     // Panel
-    const pg = addToGroup(this.add.graphics().setDepth(201));
+    const pw = 640, ph = 480, px = W/2-pw/2, py = H/2-ph/2;
+    const pg = add(this.add.graphics().setDepth(201));
     pg.fillStyle(0x050816, 0.98); pg.fillRect(px, py, pw, ph);
     pg.fillStyle(0xE0C070, 0.85);
     pg.fillRect(px, py, pw, 2); pg.fillRect(px, py+ph-2, pw, 2);
     pg.fillRect(px, py, 2, ph); pg.fillRect(px+pw-2, py, 2, ph);
+    [[px+2,py+2],[px+pw-12,py+2],[px+2,py+ph-12],[px+pw-12,py+ph-12]].forEach(([ox,oy])=>{
+      pg.fillStyle(0xE0C070,0.6); pg.fillRect(ox+3,oy,2,8); pg.fillRect(ox,oy+3,8,2);
+    });
 
-    addToGroup(this.add.text(W/2, py+28, 'ONLINE  MULTIPLAYER', {
-      fontSize:'16px', fontFamily:'"Courier New", monospace', fontStyle:'bold',
+    add(this.add.text(W/2, py+26, 'ONLINE  LOBBY', {
+      fontSize:'18px', fontFamily:'"Courier New", monospace', fontStyle:'bold',
       color:'#FFD98A', stroke:'#000000', strokeThickness:4,
     }).setOrigin(0.5).setDepth(202));
 
-    // HOST button
-    const hostBtn = addToGroup(this.add.text(W/2 - 80, py+80, '[ HOST ]', {
+    // Divider
+    const dg = add(this.add.graphics().setDepth(202));
+    dg.fillStyle(0xE0C070, 0.35); dg.fillRect(px+20, py+46, pw-40, 1);
+
+    // HOST / JOIN buttons (initial screen)
+    const hostBtn = add(this.add.text(W/2-80, py+90, '[ HOST ]', {
       fontSize:'18px', fontFamily:'"Courier New", monospace', fontStyle:'bold',
       color:'#E0C070', stroke:'#000000', strokeThickness:3,
-    }).setOrigin(0.5).setDepth(202).setInteractive({ useHandCursor:true }));
-
-    // JOIN button
-    const joinBtn = addToGroup(this.add.text(W/2 + 80, py+80, '[ JOIN ]', {
+    }).setOrigin(0.5).setDepth(202).setInteractive({useHandCursor:true}));
+    const joinBtn = add(this.add.text(W/2+80, py+90, '[ JOIN ]', {
       fontSize:'18px', fontFamily:'"Courier New", monospace', fontStyle:'bold',
       color:'#E0C070', stroke:'#000000', strokeThickness:3,
-    }).setOrigin(0.5).setDepth(202).setInteractive({ useHandCursor:true }));
+    }).setOrigin(0.5).setDepth(202).setInteractive({useHandCursor:true}));
 
-    const statusTxt = addToGroup(this.add.text(W/2, py+140, '', {
-      fontSize:'14px', fontFamily:'"Courier New", monospace',
-      color:'#FFD98A', stroke:'#000000', strokeThickness:3,
+    const codeLbl = add(this.add.text(W/2, py+135, '', {
+      fontSize:'24px', fontFamily:'"Courier New", monospace', fontStyle:'bold',
+      color:'#4AB5C9', stroke:'#000000', strokeThickness:5,
     }).setOrigin(0.5).setDepth(202));
 
-    const codeTxt = addToGroup(this.add.text(W/2, py+185, '', {
-      fontSize:'28px', fontFamily:'"Courier New", monospace', fontStyle:'bold',
-      color:'#4AB5C9', stroke:'#000000', strokeThickness:6,
+    const statusTxt = add(this.add.text(W/2, py+170, '', {
+      fontSize:'12px', fontFamily:'"Courier New", monospace', color:'#706050',
     }).setOrigin(0.5).setDepth(202));
 
-    const cancelTxt = addToGroup(this.add.text(W/2, py+ph-24, 'ESC = cancel', {
-      fontSize:'11px', fontFamily:'"Courier New", monospace', color:'#504030',
+    // Player list area
+    const playerSlots = [];
+    for (let i = 0; i < 6; i++) {
+      const sy = py + 210 + i * 36;
+      const row = add(this.add.graphics().setDepth(202));
+      const nameTxt = add(this.add.text(px+18, sy+10, '', {
+        fontSize:'12px', fontFamily:'"Courier New", monospace', fontStyle:'bold',
+        color:'#E0C070', stroke:'#000000', strokeThickness:2,
+      }).setOrigin(0, 0.5).setDepth(203));
+      const charTxt = add(this.add.text(px+180, sy+10, '', {
+        fontSize:'12px', fontFamily:'"Courier New", monospace', color:'#AAB8CC',
+      }).setOrigin(0, 0.5).setDepth(203));
+      const readyTxt = add(this.add.text(px+pw-20, sy+10, '', {
+        fontSize:'11px', fontFamily:'"Courier New", monospace', color:'#44CC88',
+      }).setOrigin(1, 0.5).setDepth(203));
+      playerSlots.push({ row, nameTxt, charTxt, readyTxt, sy });
+    }
+
+    const startBtn = add(this.add.text(W/2, py+ph-34, '', {
+      fontSize:'16px', fontFamily:'"Courier New", monospace', fontStyle:'bold',
+      color:'#FFD98A', stroke:'#000000', strokeThickness:4,
+    }).setOrigin(0.5).setDepth(202).setInteractive({useHandCursor:true}));
+
+    add(this.add.text(W/2, py+ph-14, 'ESC = cancel   |   A/D = change your character', {
+      fontSize:'10px', fontFamily:'"Courier New", monospace', color:'#404040',
     }).setOrigin(0.5).setDepth(202));
 
-    // Generate a random 4-letter room code
-    const makeCode = () => {
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-      let code = '';
-      for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
-      return code;
+    // ── Lobby state ───────────────────────────────────────────────────────────
+    let net = null;
+    let isHost = false;
+    let myCharIdx = this._p1Sel;
+    const charKeys = Object.keys(GAME_CONFIG.CHARACTERS);
+    let lobbyNavActive = false;
+
+    const updatePlayerList = (players) => {
+      playerSlots.forEach((s, i) => {
+        if (i < players.length) {
+          const p = players[i];
+          s.row.clear();
+          s.row.fillStyle(0x0A1020, 0.7); s.row.fillRect(px+8, s.sy, pw-16, 32);
+          s.row.fillStyle(0xE0C070, 0.3); s.row.fillRect(px+8, s.sy, pw-16, 1);
+          const isMe = p.slot === net?.mySlot;
+          s.nameTxt.setText(`${p.name}${isMe?' (you)':''}`).setColor(isMe?'#4AB5C9':'#E0C070');
+          const cfg = GAME_CONFIG.SPRITE_CONFIG?.[p.charName];
+          s.charTxt.setText(cfg?.displayName || p.charName);
+          s.readyTxt.setText('');
+        } else {
+          s.row.clear();
+          s.nameTxt.setText('');
+          s.charTxt.setText('');
+          s.readyTxt.setText('');
+        }
+      });
+      if (isHost) {
+        startBtn.setText(players.length >= 2 ? '[ START GAME ]' : 'Waiting for players...');
+        startBtn.setAlpha(players.length >= 2 ? 1.0 : 0.4);
+        startBtn.setInteractive(players.length >= 2);
+      }
     };
 
-    // ── HOST flow ────────────────────────────────────────────────────────────
+    // A/D key to change own char while in lobby
+    const lobbyNavKey = (e) => {
+      if (!lobbyNavActive || !net) return;
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        myCharIdx = (myCharIdx - 1 + charKeys.length) % charKeys.length;
+        net.changeChar(charKeys[myCharIdx]);
+      } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        myCharIdx = (myCharIdx + 1) % charKeys.length;
+        net.changeChar(charKeys[myCharIdx]);
+      }
+    };
+    this.input.keyboard.on('keydown', lobbyNavKey);
+    group.push({ destroy: () => this.input.keyboard.off('keydown', lobbyNavKey) });
+
+    const launchFromLobby = (players) => {
+      destroy();
+      const netPlayers = players.map(p => ({ slot:p.slot, charName:p.charName }));
+      const localSlot  = net.mySlot;
+      this._launchGame(allCharNames, net, isHost, netPlayers, localSlot);
+    };
+
+    // ── HOST flow ─────────────────────────────────────────────────────────────
     hostBtn.on('pointerdown', () => {
       hostBtn.setVisible(false); joinBtn.setVisible(false);
+      isHost = true;
       const code = makeCode();
-      statusTxt.setText('Waiting for player to join...');
-      codeTxt.setText(`Code:  ${code}`);
+      net = new NetworkManager();
+      net.myCharName = charKeys[myCharIdx];
+      codeLbl.setText(`Code:  ${code}`);
+      statusTxt.setText('Share this code — up to 5 others can join  |  A/D = change character');
+      startBtn.setText('Waiting for players...');
+      lobbyNavActive = true;
 
-      const net = new NetworkManager();
-      net.host(code, () => {
-        // Connected — launch game
-        statusTxt.setText('Player connected!');
-        this.time.delayedCall(500, () => {
-          destroy();
-          this._launchGame(charNames, net, true);
-        });
-      }, (err) => { statusTxt.setText(`Error: ${err}`); });
+      net.onLobbyUpdate = updatePlayerList;
+      net.onGameStart   = launchFromLobby;
+
+      net.host(code, charKeys[myCharIdx],
+        () => { updatePlayerList(net.lobbyPlayers); },
+        (err) => { statusTxt.setText(`Error: ${err}`); }
+      );
+
+      startBtn.on('pointerdown', () => {
+        if (net.playerCount >= 2) net.startGame();
+      });
     });
 
-    // ── JOIN flow ────────────────────────────────────────────────────────────
+    // ── JOIN flow ─────────────────────────────────────────────────────────────
     let typedCode = '';
     joinBtn.on('pointerdown', () => {
       hostBtn.setVisible(false); joinBtn.setVisible(false);
-      statusTxt.setText('Type the 4-letter code:');
-      codeTxt.setText('_ _ _ _');
+      codeLbl.setText('_ _ _ _');
+      statusTxt.setText('Type the 4-letter room code:');
 
-      _joinKeyHandler = (e) => {
+      _joinKH = (e) => {
         if (e.key === 'Escape') return;
-        if (e.key === 'Backspace') {
-          typedCode = typedCode.slice(0, -1);
-        } else if (/^[a-zA-Z]$/.test(e.key) && typedCode.length < 4) {
-          typedCode += e.key.toUpperCase();
-        }
-        const display = typedCode.split('').concat(['_','_','_','_']).slice(0,4).join(' ');
-        codeTxt.setText(display);
+        if (e.key === 'Backspace') typedCode = typedCode.slice(0,-1);
+        else if (/^[a-zA-Z]$/.test(e.key) && typedCode.length < 4) typedCode += e.key.toUpperCase();
+        codeLbl.setText(typedCode.split('').concat(['_','_','_','_']).slice(0,4).join(' '));
 
         if (typedCode.length === 4) {
           statusTxt.setText('Connecting...');
-          this.input.keyboard.off('keydown', _joinKeyHandler);
-          _joinKeyHandler = null;
+          this.input.keyboard.off('keydown', _joinKH); _joinKH = null;
 
-          const net = new NetworkManager();
-          net.join(typedCode, () => {
-            statusTxt.setText('Connected!');
-            this.time.delayedCall(500, () => {
-              destroy();
-              this._launchGame(charNames, net, false);
-            });
-          }, () => {
-            statusTxt.setText('Failed — check code and try again');
-            typedCode = '';
-            codeTxt.setText('_ _ _ _');
-            this.input.keyboard.on('keydown', _joinKeyHandler);
-          });
+          net = new NetworkManager();
+          net.myCharName = charKeys[myCharIdx];
+          net.onLobbyUpdate = (players) => {
+            updatePlayerList(players);
+            statusTxt.setText('Connected!  A/D = change character');
+            lobbyNavActive = true;
+          };
+          net.onGameStart = launchFromLobby;
+
+          net.join(typedCode, charKeys[myCharIdx],
+            () => { },
+            () => {
+              statusTxt.setText('Failed — check code and try again');
+              typedCode = ''; codeLbl.setText('_ _ _ _');
+              this.input.keyboard.on('keydown', _joinKH);
+            }
+          );
         }
       };
-      this.input.keyboard.on('keydown', _joinKeyHandler);
+      this.input.keyboard.on('keydown', _joinKH);
     });
 
-    // ESC to cancel
-    _escHandler = () => { destroy(); };
-    this.input.keyboard.once('keydown-ESC', _escHandler);
+    _escH = () => { destroy(); };
+    this.input.keyboard.once('keydown-ESC', _escH);
   }
 
   // ── Drawing helpers ───────────────────────────────────────────────────────────

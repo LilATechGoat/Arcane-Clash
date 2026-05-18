@@ -51,13 +51,13 @@ class HUD extends Phaser.Scene {
   update() {
     if (!this._built) {
       const gs = this.scene.get('GameScene');
-      if (gs?.p1 && gs?.p2) { this.characters = [gs.p1, gs.p2]; this._buildUI(); }
+      const chars = gs?.players || (gs?.p1 && gs?.p2 ? [gs.p1, gs.p2] : null);
+      if (chars?.length) { this.characters = chars; this._buildUI(); }
       return;
     }
     if (!this.characters.length) return;
     if (!this._paused) {
-      this._refreshDamage(0);
-      this._refreshDamage(1);
+      this.characters.forEach((_, i) => this._refreshDamage(i));
     }
   }
 
@@ -170,18 +170,20 @@ class HUD extends Phaser.Scene {
     this._built = true;
 
     const W = GAME_CONFIG.WIDTH, H = GAME_CONFIG.HEIGHT;
-    const p1Cfg  = GAME_CONFIG.SPRITE_CONFIG?.[this.characters[0]?.constructor.name?.replace('Character','')];
-    const p2Cfg  = GAME_CONFIG.SPRITE_CONFIG?.[this.characters[1]?.constructor.name?.replace('Character','')];
-    const p1Name = p1Cfg?.displayName || 'P1';
-    const p2Name = p2Cfg?.displayName || 'P2';
+    const names = this.characters.map(ch => {
+      const cfg = GAME_CONFIG.SPRITE_CONFIG?.[ch?.constructor.name?.replace('Character','')];
+      return cfg?.displayName || `P${(ch?.playerId??0)+1}`;
+    });
 
-    this._drawTopBar(W, p1Name, p2Name);
-    this._drawBottomHUD(W, H, p1Name, p2Name);
+    this._drawTopBar(W, names);
+    this._drawBottomHUD(W, H, names);
   }
 
   // â”€â”€ Top Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  _drawTopBar(W, p1Name, p2Name) {
+  _drawTopBar(W, names) {
+    const p1Name = names[0] || 'P1';
+    const p2Name = names[names.length - 1] || 'P2';
     const H_BAR = 30;
     const g = this.add.graphics().setDepth(90);
 
@@ -253,19 +255,16 @@ class HUD extends Phaser.Scene {
 
   // â”€â”€ Bottom Smash-Style HUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  _drawBottomHUD(W, H, p1Name, p2Name) {
-    const hudH  = 88;
-    const hudY  = H - hudH;
-    const p1cx  = Math.floor(W * 0.20);
-    const p2cx  = Math.floor(W * 0.80);
+  _drawBottomHUD(W, H, names) {
+    const n      = names.length;
+    const hudH   = 88;
+    const hudY   = H - hudH;
     const stocks = GAME_CONFIG.STARTING_STOCKS;
+    const pColors = [HC.P1, HC.P2, 0xCC44AA, 0x44CC88, 0xCCAA22, 0xAA4422];
 
-    // Full-width background strip
     const bg = this.add.graphics().setDepth(90);
     bg.fillStyle(HC.BG, 0.97);
     bg.fillRect(0, hudY, W, hudH);
-
-    // Gold top border
     bg.fillStyle(HC.GOLD, 0.85);
     bg.fillRect(0, hudY, W, 1);
     bg.fillStyle(HC.GOLD_HI, 0.35);
@@ -273,67 +272,63 @@ class HUD extends Phaser.Scene {
     bg.fillStyle(HC.ACCENT, 1);
     bg.fillRect(0, hudY + 3, W, 1);
 
-    // Vertical dividers â€” thin gold lines separating zones
-    [W/2].forEach(x => {
-      bg.fillStyle(HC.GOLD, 0.25);
-      bg.fillRect(x - 1, hudY + 8, 1, hudH - 16);
+    // Panel width scales with player count
+    const panelW  = Math.min(180, Math.floor((W - 120) / n));
+    const totalPW = n * panelW;
+    const startX  = (W - totalPW) / 2;
+    const fontSize = n <= 2 ? '38px' : n <= 4 ? '28px' : '22px';
+
+    this._dmgTexts  = [];
+    this._allStocks = [];
+
+    names.forEach((name, i) => {
+      const col   = pColors[i] || HC.GOLD;
+      const px    = startX + i * panelW + panelW / 2;
+      const pxL   = startX + i * panelW;
+
+      this._drawHUDPanel(bg, pxL + 2, hudY + 8, panelW - 4, hudH - 16, col);
+
+      // Name
+      const hexCol = '#' + col.toString(16).padStart(6,'0');
+      this.add.text(px, hudY + 16, name, {
+        fontSize:'10px', fontFamily:'”Courier New”, monospace', fontStyle:'bold',
+        color: hexCol, stroke:'#000000', strokeThickness:2,
+      }).setOrigin(0.5, 0.5).setDepth(92);
+
+      // Damage %
+      const dmg = this.add.text(px, hudY + 42, '0%', {
+        fontSize, fontFamily:'”Courier New”, monospace', fontStyle:'bold',
+        color:'#FFD98A', stroke:'#000000', strokeThickness:5,
+      }).setOrigin(0.5, 0.5).setDepth(92);
+      this._dmgTexts.push(dmg);
+
+      // Stocks
+      const stockY = hudY + 70;
+      const row = [];
+      for (let s = 0; s < stocks; s++) {
+        const sx = px - ((stocks-1)*9) + s*18;
+        row.push(this._makeStockDiamond(sx, stockY, col, true));
+      }
+      this._allStocks.push(row);
     });
 
-    // Player panel insets
-    this._drawHUDPanel(bg, p1cx - 90, hudY + 8,  180, hudH - 16, HC.P1);
-    this._drawHUDPanel(bg, p2cx - 90, hudY + 8,  180, hudH - 16, HC.P2);
+    // Keep legacy refs for 2-player code paths
+    this._p1Dmg    = this._dmgTexts[0];
+    this._p2Dmg    = this._dmgTexts[1] || this._dmgTexts[0];
+    this._p1Stocks = this._allStocks[0] || [];
+    this._p2Stocks = this._allStocks[1] || [];
 
-    // Center fight label
+    // Center FIGHT badge
     const cg = this.add.graphics().setDepth(91);
     const cw = 100, ch = 22, cx = W/2, cy = hudY + hudH/2;
-    cg.fillStyle(HC.PANEL, 1.0);
-    cg.fillRect(cx - cw/2, cy - ch/2, cw, ch);
+    cg.fillStyle(HC.PANEL, 1.0); cg.fillRect(cx-cw/2, cy-ch/2, cw, ch);
     cg.fillStyle(HC.GOLD, 0.7);
-    cg.fillRect(cx - cw/2,     cy - ch/2, cw, 1);
-    cg.fillRect(cx - cw/2,     cy + ch/2 - 1, cw, 1);
-    cg.fillRect(cx - cw/2,     cy - ch/2, 1, ch);
-    cg.fillRect(cx + cw/2 - 1, cy - ch/2, 1, ch);
-    // Corner diamonds
-    [[cx - cw/2 - 3, cy], [cx + cw/2 + 2, cy]].forEach(([dx, dy]) => {
-      cg.fillStyle(HC.GOLD, 0.6);
-      cg.fillRect(dx,     dy - 3, 2, 6);
-      cg.fillRect(dx - 2, dy - 1, 6, 2);
-    });
+    cg.fillRect(cx-cw/2, cy-ch/2, cw, 1); cg.fillRect(cx-cw/2, cy+ch/2-1, cw, 1);
+    cg.fillRect(cx-cw/2, cy-ch/2, 1, ch); cg.fillRect(cx+cw/2-1, cy-ch/2, 1, ch);
     this.add.text(cx, cy, '[ FIGHT ]', {
-      fontSize: '11px', fontFamily: '"Courier New", monospace', fontStyle: 'bold',
-      color: '#E0C070', stroke: '#000000', strokeThickness: 2,
+      fontSize:'11px', fontFamily:'”Courier New”, monospace', fontStyle:'bold',
+      color:'#E0C070', stroke:'#000000', strokeThickness:2,
     }).setOrigin(0.5).setDepth(92);
-
-    // Name labels (small, above % number)
-    this.add.text(p1cx, hudY + 18, p1Name, {
-      fontSize: '10px', fontFamily: '"Courier New", monospace', fontStyle: 'bold',
-      color: '#4AB5C9', stroke: '#000000', strokeThickness: 2,
-    }).setOrigin(0.5, 0.5).setDepth(92);
-
-    this.add.text(p2cx, hudY + 18, p2Name, {
-      fontSize: '10px', fontFamily: '"Courier New", monospace', fontStyle: 'bold',
-      color: '#FF8866', stroke: '#000000', strokeThickness: 2,
-    }).setOrigin(0.5, 0.5).setDepth(92);
-
-    // Damage % text â€” large, Smash-style
-    this._p1Dmg = this.add.text(p1cx, hudY + 44, '0%', {
-      fontSize: '38px', fontFamily: '"Courier New", monospace', fontStyle: 'bold',
-      color: '#FFD98A', stroke: '#000000', strokeThickness: 6,
-    }).setOrigin(0.5, 0.5).setDepth(92);
-
-    this._p2Dmg = this.add.text(p2cx, hudY + 44, '0%', {
-      fontSize: '38px', fontFamily: '"Courier New", monospace', fontStyle: 'bold',
-      color: '#FFD98A', stroke: '#000000', strokeThickness: 6,
-    }).setOrigin(0.5, 0.5).setDepth(92);
-
-    // Stock diamonds
-    const stockY = hudY + 70;
-    for (let i = 0; i < stocks; i++) {
-      const sx1 = p1cx - ((stocks - 1) * 9) + i * 18;
-      const sx2 = p2cx - ((stocks - 1) * 9) + i * 18;
-      this._p1Stocks.push(this._makeStockDiamond(sx1, stockY, HC.P1,  true));
-      this._p2Stocks.push(this._makeStockDiamond(sx2, stockY, HC.P2,  true));
-    }
   }
 
   _drawHUDPanel(g, x, y, w, h, accentCol) {
@@ -400,30 +395,24 @@ class HUD extends Phaser.Scene {
   _refreshDamage(pid) {
     const char = this.characters[pid];
     if (!char) return;
-    const pct = Math.floor(char.damage);
-
-    const text = pid === 0 ? this._p1Dmg : this._p2Dmg;
-    const prev = pid === 0 ? this._p1DmgVal : this._p2DmgVal;
+    const pct  = Math.floor(char.damage);
+    const text = this._dmgTexts?.[pid] || (pid === 0 ? this._p1Dmg : this._p2Dmg);
     if (!text) return;
 
-    // Color based on damage level
-    const col = pct >= 150 ? '#FF3311'
-              : pct >= 100 ? '#FF7722'
-              : pct >= 50  ? '#FFBB44'
-              :               '#FFD98A';
+    const col = pct >= 150 ? '#FF3311' : pct >= 100 ? '#FF7722'
+              : pct >= 50  ? '#FFBB44' : '#FFD98A';
     text.setText(`${pct}%`).setColor(col);
 
-    // Flash on new damage
+    const prevKey = `_dmgVal${pid}`;
+    const prev    = this[prevKey] || 0;
     if (pct > prev) {
-      this.tweens.add({ targets: text, scaleX: 1.18, scaleY: 1.18,
-        duration: 80, yoyo: true, ease: 'Quad.easeOut' });
-      if (pid === 0) this._p1DmgVal = pct;
-      else           this._p2DmgVal = pct;
+      this.tweens.add({ targets:text, scaleX:1.18, scaleY:1.18,
+        duration:80, yoyo:true, ease:'Quad.easeOut' });
+      this[prevKey] = pct;
     }
 
-    // Sync stocks
-    const stocks = pid === 0 ? this._p1Stocks : this._p2Stocks;
-    this._syncStocks(stocks, char.stocks);
+    const icons = this._allStocks?.[pid] || (pid===0 ? this._p1Stocks : this._p2Stocks);
+    this._syncStocks(icons, char.stocks);
   }
 
   _syncStocks(icons, remaining) {
@@ -436,9 +425,9 @@ class HUD extends Phaser.Scene {
 
   _onDeath({ char }) {
     if (!this._built) return;
-    const icons = char.playerId === 0 ? this._p1Stocks : this._p2Stocks;
-    // stocks is already decremented â€” the lost stock was at index [stocks]
-    const lost = icons[char.stocks];
+    const idx   = this.characters.indexOf(char);
+    const icons = this._allStocks?.[idx] || (char.playerId===0 ? this._p1Stocks : this._p2Stocks);
+    const lost  = icons?.[char.stocks];
     if (!lost) return;
     this._drawDiamond(lost.g, lost.cx, lost.cy, HC.WHITE, true);
     this.time.delayedCall(140, () => {

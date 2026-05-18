@@ -9,13 +9,15 @@ class GameScene extends Phaser.Scene {
   constructor() { super({ key: 'GameScene' }); }
 
   init(data) {
-    this._p1CharName = data.p1Char   || 'Naruto';
-    this._p2CharName = data.p2Char   || 'Goku';
-    this._stageName  = data.stage    || 'battlefield';
-    this._mode       = data.mode     || 'pvp';
-    this._botLevel   = data.botLevel || 5;
-    this._netMgr     = data.netMgr   || null;  // NetworkManager instance or null
-    this._netIsHost  = data.netIsHost || false;
+    this._p1CharName  = data.p1Char    || 'Naruto';
+    this._p2CharName  = data.p2Char    || 'Goku';
+    this._stageName   = data.stage     || 'battlefield';
+    this._mode        = data.mode      || 'pvp';
+    this._botLevel    = data.botLevel  || 5;
+    this._netMgr      = data.netMgr    || null;
+    this._netIsHost   = data.netIsHost || false;
+    this._netPlayers  = data.netPlayers|| null; // [{slot,charName}] for online
+    this._localSlot   = data.localSlot ?? 0;
   }
 
   create() {
@@ -24,22 +26,27 @@ class GameScene extends Phaser.Scene {
     this._platforms   = this._buildStage(this._stageName);
     this.physicsSys   = new PhysicsSystem(this, this._platforms);
     this.combatSystem = new CombatSystem(this, this.animMgr);
-
-    // Build stage visuals BEFORE spawning characters so characters render on top
     this._drawStage(this._stageName);
 
-    const P1Class = GAME_CONFIG.CHARACTERS[this._p1CharName] || GAME_CONFIG.CHARACTERS['Naruto'];
-    const P2Class = GAME_CONFIG.CHARACTERS[this._p2CharName] || GAME_CONFIG.CHARACTERS['Goku'];
+    // Build player list
+    const playerList = this._netPlayers || [
+      { slot:0, charName:this._p1CharName },
+      { slot:1, charName:this._p2CharName },
+    ];
+    const spawnXs = this._spawnPositions(playerList.length);
 
-    // Store on scene so UIScene can find them via lazy init if timing is off
-    this.p1 = new P1Class(this, 420, 500, 0, this.inputMgr, this.combatSystem, this.animMgr);
-    this.p2 = new P2Class(this, 860, 500, 1, this.inputMgr, this.combatSystem, this.animMgr);
+    this.players = playerList.map((p, i) => {
+      const Cls  = GAME_CONFIG.CHARACTERS[p.charName] || GAME_CONFIG.CHARACTERS['Naruto'];
+      const char = new Cls(this, spawnXs[i], 500, p.slot, this.inputMgr, this.combatSystem, this.animMgr);
+      this.physicsSys.register(char);
+      this.combatSystem.register(char);
+      return char;
+    });
+    this.combatSystem.characters = this.players;
 
-    this.physicsSys.register(this.p1);
-    this.physicsSys.register(this.p2);
-    this.combatSystem.register(this.p1);
-    this.combatSystem.register(this.p2);
-    this.combatSystem.characters = [this.p1, this.p2];
+    // Back-compat refs
+    this.p1 = this.players[0];
+    this.p2 = this.players[1] || this.players[0];
 
     // Bot mode
     this._bot = null;
@@ -48,15 +55,16 @@ class GameScene extends Phaser.Scene {
       this.inputMgr.setBotController(1, this._bot);
     }
 
-    // Network mode — remote player's inputs come via NetworkManager
+    // Network mode — remote players get slot adapters
     if (this._mode === 'online' && this._netMgr) {
-      const remoteId = this._netIsHost ? 1 : 0;
-      this.inputMgr.setNetController(remoteId, this._netMgr);
-
-      // Guest reads host state synchronously in update() — no callback needed
+      playerList.forEach(p => {
+        if (p.slot !== this._localSlot) {
+          this.inputMgr.setNetController(p.slot, this._netMgr.getSlotAdapter(p.slot));
+        }
+      });
     }
 
-    this.events.emit('gameReady', [this.p1, this.p2]);
+    this.events.emit('gameReady', this.players);
 
     this.events.on('gameOver', this._handleGameOver, this);
 
@@ -67,8 +75,7 @@ class GameScene extends Phaser.Scene {
 
     // Override AnimationManager's flashHit to use CharacterRenderer
     this.animMgr.flashHit = (sprite) => {
-      // sprite here is a legacy arg — find the character whose sprite this belongs to
-      const char = [this.p1, this.p2].find(c => c.sprite === sprite);
+      const char = this.players.find(c => c.sprite === sprite);
       if (char?.renderer) char.renderer.flashHit();
     };
 
@@ -88,19 +95,21 @@ class GameScene extends Phaser.Scene {
 
     // Network sync
     if (this._mode === 'online' && this._netMgr?.isConnected) {
-      const localId = this._netIsHost ? 0 : 1;
-      this.inputMgr.sendNetworkInput(this._netMgr, localId);
-
       if (this._netIsHost) {
-        // Host: send authoritative state to guest
-        this._netMgr.sendState(this.p1, this.p2);
+        // Host: send local inputs + broadcast authoritative state
+        this.inputMgr.sendNetworkInput(this._netMgr, this._localSlot);
+        this._netMgr.sendStateToAll(this.players);
       } else {
-        // Guest: apply buffered host state AFTER physics so it overrides local sim
+        // Guest: send local inputs to host
+        this.inputMgr.sendNetworkInput(this._netMgr, this._localSlot);
+        // Apply buffered host state after physics
         const s = this._netMgr.pendingState;
         if (s) {
           this._netMgr.pendingState = null;
-          this._applyNetState(this.p1, s.p1x, s.p1y, s.p1vx, s.p1vy, s.p1d, s.p1s, s.p1f);
-          this._applyNetState(this.p2, s.p2x, s.p2y, s.p2vx, s.p2vy, s.p2d, s.p2s, s.p2f);
+          s.c.forEach((cd, i) => {
+            const ch = this.players[i];
+            if (ch) this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f);
+          });
         }
       }
     }
@@ -599,6 +608,13 @@ class GameScene extends Phaser.Scene {
   _rng() {
     this._rngState = (this._rngState * 1664525 + 1013904223) & 0xffffffff;
     return (this._rngState >>> 0) / 0xffffffff;
+  }
+
+  // ── Spawn positions spread across the stage ──────────────────────────────
+  _spawnPositions(n) {
+    const left = 360, right = 920;
+    if (n === 1) return [640];
+    return Array.from({ length:n }, (_,i) => Math.round(left + (right-left)*i/(n-1)));
   }
 
   // ── Apply authoritative state from host (guest only) ─────────────────────
