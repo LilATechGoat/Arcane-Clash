@@ -63,29 +63,27 @@ class SpriteAnimator {
     this._play(newState);
   }
 
-  // Force state + exact frame — used by network sync.
-  // Only restarts the animation when the STATE changes; otherwise just seeks to the frame.
-  forceState(newState, frameIdx) {
-    const suffix = this._stateMap[newState] || 'idle';
-    const key    = `${this.charName}_${suffix}`;
+  // Force state + animation progress — used by network sync.
+  forceState(newState, animProgress) {
+    const suffix  = this._stateMap[newState] || 'idle';
+    const key     = `${this.charName}_${suffix}`;
+    const changed = this._playing !== key;
+    const stopped = !this.sprite.anims?.isPlaying;
 
-    // Only restart if the animation key actually changed
-    if (this._playing !== key) {
+    // Restart animation when key changed OR when it finished and host is still in this state
+    if (changed || stopped) {
       this.state    = newState;
       this._playing = key;
-      if (this.scene.anims.exists(key)) this.sprite.play(key, true);
+      if (this.scene.anims.exists(key)) {
+        this.sprite.play(key, true);
+      }
     } else {
       this.state = newState;
     }
 
-    // Seek to the exact frame the host is on
-    if (frameIdx !== undefined) {
-      try {
-        const anim = this.sprite.anims.currentAnim;
-        if (anim && frameIdx < anim.frames.length) {
-          this.sprite.anims.setCurrentFrame(anim.frames[frameIdx]);
-        }
-      } catch (_) {}
+    // Seek to same progress point as host
+    if (animProgress !== undefined && this.sprite.anims?.isPlaying) {
+      try { this.sprite.anims.setProgress(animProgress); } catch (_) {}
     }
   }
 

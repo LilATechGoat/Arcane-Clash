@@ -123,7 +123,7 @@ class GameScene extends Phaser.Scene {
             if (!ch) return;
             const prevDmg  = ch.damage;
             const prevAnim = ch.renderer?.state || 'idle';
-            this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f, cd.a, cd.af);
+            this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f, cd.a, cd.ap);
 
             // Hit VFX when damage increases
             if (cd.d > prevDmg && this.playHitVFX) {
@@ -661,10 +661,10 @@ class GameScene extends Phaser.Scene {
     char.stocks = stocks;
     char.facing = facing;
 
-    // Sync animation — use forceState to bypass the same-state guard
+    // Sync animation state + progress
     if (anim && char.renderer) {
       if (char.renderer.forceState) {
-        char.renderer.forceState(anim, animFrame);
+        char.renderer.forceState(anim, animFrame); // animFrame is now progress 0-1
       } else {
         char.renderer.setState(anim);
       }
