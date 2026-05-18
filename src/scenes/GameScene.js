@@ -131,15 +131,15 @@ class GameScene extends Phaser.Scene {
               this.playHitVFX(ch.x, ch.y - 20, htype, this.players.find(p => p !== ch));
             }
 
-            // Attack VFX when a remote character starts a new attack animation
+            // Attack VFX when a REMOTE character starts a new attack — skip local player
+            const isRemote     = ch.playerId !== this._localSlot;
             const isAttackAnim = cd.a && cd.a.startsWith('attack');
             const wasAttacking = prevAnim && prevAnim.startsWith('attack');
-            if (isAttackAnim && !wasAttacking && ch._emitKi) {
-              // Determine VFX color from the character's theme
+            if (isRemote && isAttackAnim && !wasAttacking && ch._emitKi) {
               const name = ch.constructor.name.replace('Character','');
-              const col = { Naruto:0x44ccff, Goku:0xff8800, Ichigo:0x88bbee,
-                            Luffy:0xff3300, Tanjiro:0x44ee88, Warrior:0xaa66cc }[name] || 0xffffff;
-              ch._emitKi(ch.x + ch.facing*30, ch.y - 10, col, 10, 40);
+              const col  = { Naruto:0x44ccff, Goku:0xff8800, Ichigo:0x88bbee,
+                             Luffy:0xff3300, Tanjiro:0x44ee88, Warrior:0xaa66cc }[name] || 0xffffff;
+              ch._emitKi(ch.x + ch.facing * 30, ch.y - 10, col, 8, 36);
             }
           });
         }
