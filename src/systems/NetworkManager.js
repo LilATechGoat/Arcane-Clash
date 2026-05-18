@@ -118,11 +118,11 @@ class NetworkManager {
     });
   }
 
-  startGame() {
+  startGame(stage) {
     const players = this._buildLobby();
-    this._broadcast({ t:'start', players });
+    this._broadcast({ t:'start', players, stage });
     this.isConnected = true;
-    this.onGameStart?.(players);
+    this.onGameStart?.(players, stage);
   }
 
   // ── GUEST ─────────────────────────────────────────────────────────────────
@@ -151,7 +151,7 @@ class NetworkManager {
           this.onLobbyUpdate?.(data.players);
         } else if (data.t === 'start') {
           this.isConnected = true;
-          this.onGameStart?.(data.players);
+          this.onGameStart?.(data.players, data.stage);
         } else if (data.t === 's') {
           this.pendingState = data;
         }

@@ -735,10 +735,15 @@ class MenuScene extends Phaser.Scene {
     this.input.keyboard.on('keydown', lobbyNavKey);
     group.push({ destroy: () => this.input.keyboard.off('keydown', lobbyNavKey) });
 
-    const launchFromLobby = (players) => {
+    const launchFromLobby = (players, stage) => {
       destroy();
       const netPlayers = players.map(p => ({ slot:p.slot, charName:p.charName }));
       const localSlot  = net.mySlot;
+      // Sync stage from host — override local selection
+      if (stage) {
+        const idx = GAME_CONFIG.STAGES.indexOf(stage);
+        if (idx >= 0) this._stageSel = idx;
+      }
       this._launchGame(allCharNames, net, isHost, netPlayers, localSlot);
     };
 
@@ -756,9 +761,9 @@ class MenuScene extends Phaser.Scene {
 
       net.onLobbyUpdate = updatePlayerList;
       // Host waits 400ms after broadcast so guests receive the packet first
-      net.onGameStart   = (players) => {
+      net.onGameStart   = (players, stage) => {
         statusTxt.setText('Starting...');
-        this.time.delayedCall(400, () => launchFromLobby(players));
+        this.time.delayedCall(400, () => launchFromLobby(players, stage));
       };
 
       net.host(code, charKeys[myCharIdx],
@@ -770,7 +775,7 @@ class MenuScene extends Phaser.Scene {
         if (net && net.playerCount >= 2) {
           startBtn.disableInteractive();
           startBtn.setText('Starting...');
-          net.startGame();
+          net.startGame(GAME_CONFIG.STAGES[this._stageSel]);
         }
       });
     });
@@ -799,7 +804,7 @@ class MenuScene extends Phaser.Scene {
             statusTxt.setText('Connected!  A/D = change character');
             lobbyNavActive = true;
           };
-          net.onGameStart = launchFromLobby;
+          net.onGameStart = (players, stage) => launchFromLobby(players, stage);
 
           net.join(typedCode, charKeys[myCharIdx],
             () => { },
