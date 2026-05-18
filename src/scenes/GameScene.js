@@ -115,7 +115,14 @@ class GameScene extends Phaser.Scene {
           this._netMgr.pendingState = null;
           s.c.forEach((cd, i) => {
             const ch = this.players[i];
-            if (ch) this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f);
+            if (!ch) return;
+            const prevDmg = ch.damage;
+            this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f, cd.a);
+            // Trigger hit VFX locally when we see damage increase
+            if (cd.d > prevDmg && this.playHitVFX) {
+              const htype = (cd.d - prevDmg) >= 14 ? 'heavy' : 'light';
+              this.playHitVFX(ch.x, ch.y - 20, htype, this.players.find(p => p !== ch));
+            }
           });
         }
       }
@@ -627,7 +634,7 @@ class GameScene extends Phaser.Scene {
   }
 
   // ── Apply authoritative state from host (guest only) ─────────────────────
-  _applyNetState(char, x, y, vx, vy, damage, stocks, facing) {
+  _applyNetState(char, x, y, vx, vy, damage, stocks, facing, anim) {
     char.x      = x;
     char.y      = y;
     char.vel.x  = vx;
@@ -636,13 +643,16 @@ class GameScene extends Phaser.Scene {
     char.stocks = stocks;
     char.facing = facing;
 
+    // Sync animation state — drives attack/hurt/idle visuals on remote chars
+    if (anim && char.renderer?.setState) char.renderer.setState(anim);
+
     // Force renderer to the authoritative position immediately
     if (char.renderer) char.renderer.update(0, x, y, facing);
 
-    // Sync ancillary objects (shield, damage text, etc.)
-    if (char.shieldSprite)  char.shieldSprite.setPosition(x, y);
-    if (char._shieldRing)   char._shieldRing.setPosition(x, y);
-    if (char._dmgText)      char._dmgText.setPosition(x, y - GAME_CONFIG.CHAR_H / 2 - 30);
+    // Sync ancillary objects
+    if (char.shieldSprite) char.shieldSprite.setPosition(x, y);
+    if (char._shieldRing)  char._shieldRing.setPosition(x, y);
+    if (char._dmgText)     char._dmgText.setPosition(x, y - GAME_CONFIG.CHAR_H / 2 - 30);
   }
 
   // ── Game over ─────────────────────────────────────────────────────────────
