@@ -123,7 +123,9 @@ class GameScene extends Phaser.Scene {
             if (!ch) return;
             const prevDmg  = ch.damage;
             const prevAnim = ch.renderer?.state || 'idle';
-            this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f, cd.a);
+            // Only sync animation for remote chars — local player keeps their own animation
+            const isRemote = ch.playerId !== this._localSlot;
+            this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f, isRemote ? cd.a : null);
 
             // Hit VFX when damage increases
             if (cd.d > prevDmg && this.playHitVFX) {
