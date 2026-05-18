@@ -65,9 +65,14 @@ class GameScene extends Phaser.Scene {
           }
         });
       } else {
-        // Guest: remote players are driven purely by host state (no input adapters needed)
-        // Local player always uses keyboard 0 (WASD) regardless of slot
+        // Guest: local player uses keyboard 0 (WASD)
         this.inputMgr.setKeyboardOverride(this._localSlot, 0);
+        // Remote players get null adapters — zero inputs, driven by host state only
+        playerList.forEach(p => {
+          if (p.slot !== this._localSlot) {
+            this.inputMgr.setNetController(p.slot, this._netMgr.getNullAdapter());
+          }
+        });
       }
     }
 

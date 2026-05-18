@@ -8,6 +8,16 @@
 
 /* global NetworkManager */
 
+// ── Null adapter — remote chars on guest machine get zero inputs ──────────────
+
+class NullInputAdapter {
+  axisX()        { return 0;     }
+  axisY()        { return 0;     }
+  isHeld()       { return false; }
+  justPressed()  { return false; }
+  consumeBuffer(){ return false; }
+}
+
 // ── Per-slot input adapter — plugs into InputManager like a BotController ───
 
 class SlotInputAdapter {
@@ -197,9 +207,8 @@ class NetworkManager {
     });
   }
 
-  getSlotAdapter(slot) {
-    return new SlotInputAdapter(this, slot);
-  }
+  getSlotAdapter(slot) { return new SlotInputAdapter(this, slot); }
+  getNullAdapter()     { return new NullInputAdapter(); }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
