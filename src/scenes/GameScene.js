@@ -121,12 +121,25 @@ class GameScene extends Phaser.Scene {
           s.c.forEach((cd, i) => {
             const ch = this.players[i];
             if (!ch) return;
-            const prevDmg = ch.damage;
+            const prevDmg  = ch.damage;
+            const prevAnim = ch.renderer?.state || 'idle';
             this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f, cd.a, cd.af);
-            // Trigger hit VFX locally when we see damage increase
+
+            // Hit VFX when damage increases
             if (cd.d > prevDmg && this.playHitVFX) {
               const htype = (cd.d - prevDmg) >= 14 ? 'heavy' : 'light';
               this.playHitVFX(ch.x, ch.y - 20, htype, this.players.find(p => p !== ch));
+            }
+
+            // Attack VFX when a remote character starts a new attack animation
+            const isAttackAnim = cd.a && cd.a.startsWith('attack');
+            const wasAttacking = prevAnim && prevAnim.startsWith('attack');
+            if (isAttackAnim && !wasAttacking && ch._emitKi) {
+              // Determine VFX color from the character's theme
+              const name = ch.constructor.name.replace('Character','');
+              const col = { Naruto:0x44ccff, Goku:0xff8800, Ichigo:0x88bbee,
+                            Luffy:0xff3300, Tanjiro:0x44ee88, Warrior:0xaa66cc }[name] || 0xffffff;
+              ch._emitKi(ch.x + ch.facing*30, ch.y - 10, col, 10, 40);
             }
           });
         }

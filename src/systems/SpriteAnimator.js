@@ -63,23 +63,29 @@ class SpriteAnimator {
     this._play(newState);
   }
 
-  // Force state + exact frame — used by network sync to bypass the same-state guard
+  // Force state + exact frame — used by network sync.
+  // Only restarts the animation when the STATE changes; otherwise just seeks to the frame.
   forceState(newState, frameIdx) {
-    this.state = newState;
     const suffix = this._stateMap[newState] || 'idle';
     const key    = `${this.charName}_${suffix}`;
-    this._playing = key;
-    if (this.scene.anims.exists(key)) {
-      this.sprite.play(key, true);
-      // Jump to the specific frame so both screens show the same pose
-      if (frameIdx !== undefined) {
-        try {
-          const anim = this.sprite.anims.currentAnim;
-          if (anim && frameIdx < anim.frames.length) {
-            this.sprite.anims.setCurrentFrame(anim.frames[frameIdx]);
-          }
-        } catch (_) {}
-      }
+
+    // Only restart if the animation key actually changed
+    if (this._playing !== key) {
+      this.state    = newState;
+      this._playing = key;
+      if (this.scene.anims.exists(key)) this.sprite.play(key, true);
+    } else {
+      this.state = newState;
+    }
+
+    // Seek to the exact frame the host is on
+    if (frameIdx !== undefined) {
+      try {
+        const anim = this.sprite.anims.currentAnim;
+        if (anim && frameIdx < anim.frames.length) {
+          this.sprite.anims.setCurrentFrame(anim.frames[frameIdx]);
+        }
+      } catch (_) {}
     }
   }
 

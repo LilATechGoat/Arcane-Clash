@@ -201,8 +201,9 @@ class NetworkManager {
         x:  Math.round(ch.x),     y:  Math.round(ch.y),
         vx: Math.round(ch.vel.x), vy: Math.round(ch.vel.y),
         d: ch.damage, s: ch.stocks, f: ch.facing,
-        a:  ch.renderer?.state || 'idle',              // animation state
-        af: ch.renderer?.sprite?.anims?.currentFrame?.index ?? 0, // frame index
+        a:  ch.renderer?.state || 'idle',
+        af: ch.renderer?.sprite?.anims?.currentFrame?.index ?? 0,
+        atk: ch.isAttacking ? 1 : 0,   // attacking flag for VFX trigger
       })),
     });
   }
