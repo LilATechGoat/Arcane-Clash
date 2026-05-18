@@ -122,7 +122,7 @@ class GameScene extends Phaser.Scene {
             const ch = this.players[i];
             if (!ch) return;
             const prevDmg = ch.damage;
-            this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f, cd.a);
+            this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f, cd.a, cd.af);
             // Trigger hit VFX locally when we see damage increase
             if (cd.d > prevDmg && this.playHitVFX) {
               const htype = (cd.d - prevDmg) >= 14 ? 'heavy' : 'light';
@@ -639,7 +639,7 @@ class GameScene extends Phaser.Scene {
   }
 
   // ── Apply authoritative state from host (guest only) ─────────────────────
-  _applyNetState(char, x, y, vx, vy, damage, stocks, facing, anim) {
+  _applyNetState(char, x, y, vx, vy, damage, stocks, facing, anim, animFrame) {
     char.x      = x;
     char.y      = y;
     char.vel.x  = vx;
@@ -648,8 +648,18 @@ class GameScene extends Phaser.Scene {
     char.stocks = stocks;
     char.facing = facing;
 
-    // Sync animation state — drives attack/hurt/idle visuals on remote chars
-    if (anim && char.renderer?.setState) char.renderer.setState(anim);
+    // Sync animation state + frame so both screens show the same pose
+    if (anim && char.renderer?.setState) {
+      char.renderer.setState(anim);
+      if (animFrame !== undefined && char.renderer.sprite?.anims?.isPlaying) {
+        try {
+          const frames = char.renderer.sprite.anims.currentAnim?.frames;
+          if (frames && animFrame < frames.length) {
+            char.renderer.sprite.anims.setCurrentFrame(frames[animFrame]);
+          }
+        } catch(_) {}
+      }
+    }
 
     // Force renderer to the authoritative position immediately
     if (char.renderer) char.renderer.update(0, x, y, facing);
