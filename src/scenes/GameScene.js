@@ -150,7 +150,10 @@ class GameScene extends Phaser.Scene {
     this.physicsSys.update(dt);
     this.p1.update(dt);
     this.p2.update(dt);
-    this.combatSystem.update();
+    // Guests skip local combat — damage/stocks are authoritative from host
+    if (this._mode !== 'online' || this._netIsHost) {
+      this.combatSystem.update();
+    }
     this._tickAmbient(time);
   }
 
