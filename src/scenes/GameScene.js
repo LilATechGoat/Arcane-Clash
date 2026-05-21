@@ -91,9 +91,16 @@ class GameScene extends Phaser.Scene {
       if (char?.renderer) char.renderer.flashHit();
     };
 
-    // Override flashHit on CombatSystem to call renderer directly
+    // Override _applyHit: guests skip damage/knockback (host authoritative),
+    // but still fire flash + VFX for local feedback
     const origApplyHit = this.combatSystem._applyHit.bind(this.combatSystem);
     this.combatSystem._applyHit = (hb, target) => {
+      if (this._mode === 'online' && !this._netIsHost) {
+        // Guest: visual feedback only — no damage/knockback locally
+        if (target.renderer) target.renderer.flashHit();
+        if (this.playHitVFX) this.playHitVFX(target.x, target.y - 20, hb.type, hb.owner);
+        return;
+      }
       origApplyHit(hb, target);
       if (target.renderer) target.renderer.flashHit();
     };
@@ -150,10 +157,7 @@ class GameScene extends Phaser.Scene {
     this.physicsSys.update(dt);
     this.p1.update(dt);
     this.p2.update(dt);
-    // Guests skip local combat — damage/stocks are authoritative from host
-    if (this._mode !== 'online' || this._netIsHost) {
-      this.combatSystem.update();
-    }
+    this.combatSystem.update();
     this._tickAmbient(time);
   }
 

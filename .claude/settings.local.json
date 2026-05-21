@@ -12,7 +12,11 @@
       "PowerShell(New-Item *)",
       "Bash(git pull *)",
       "Bash(git stash *)",
-      "Bash(git commit -m 'Skip local combat on guest — damage is authoritative from host only *)"
+      "Bash(git commit -m 'Skip local combat on guest — damage is authoritative from host only *)",
+      "PowerShell(node --check \"C:\\\\Users\\\\andre\\\\Downloads\\\\Phaser_Game\\\\src\\\\scenes\\\\GameScene.js\" 2>&1; Write-Host \"Exit: $LASTEXITCODE\")",
+      "Bash(git add *)",
+      "Bash(git commit -m 'Fix bidirectional damage: restore combat on guest, skip damage/knockback locally only *)",
+      "Bash(git push *)"
     ]
   }
 }
