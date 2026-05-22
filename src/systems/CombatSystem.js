@@ -150,16 +150,14 @@ class CombatSystem {
   }
 
   _calcKnockback(hb, targetDamage) {
-    // Smash Bros style knockback:
-    //   • At   0% damage → barely moves (kbBase * 0.18 minimum)
-    //   • At  50% damage → noticeable launch
-    //   • At 100% damage → heavy hits reach kill zone
-    //   • At 150%+ damage → almost any hit kills
-    //
-    // growth uses p^1.4 (super-linear) so low % feels safe and high % feels lethal.
+    // Smash Bros style: strong base knockback at 0% that scales explosively.
+    //   • 0%   → already flies noticeably (base = kbBase * 0.55)
+    //   • 50%  → solid launch
+    //   • 100% → kill territory for most moves
+    //   • 150% → everything kills
     const p      = Math.max(targetDamage, 0);
-    const base   = hb.kbBase * 0.18;                        // tiny baseline always applied
-    const growth = hb.kbScale * Math.pow(p, 1.4) / 38;     // explosive scaling with damage
+    const base   = hb.kbBase * 0.55;                        // strong baseline — feels like Smash
+    const growth = hb.kbScale * Math.pow(p, 1.3) / 28;     // smooth explosive scaling
     const total  = (base + growth) * GAME_CONFIG.KB_SCALE;
     return Math.min(total, GAME_CONFIG.KB_MAX);
   }
