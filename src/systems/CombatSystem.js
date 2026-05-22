@@ -156,8 +156,8 @@ class CombatSystem {
     //   • 100% → kill territory for most moves
     //   • 150% → everything kills
     const p      = Math.max(targetDamage, 0);
-    const base   = hb.kbBase * 0.55;                        // strong baseline — feels like Smash
-    const growth = hb.kbScale * Math.pow(p, 1.3) / 28;     // smooth explosive scaling
+    const base   = hb.kbBase * 0.80;                        // Smash-level base — always flies
+    const growth = hb.kbScale * Math.pow(p, 1.3) / 24;     // faster growth curve
     const total  = (base + growth) * GAME_CONFIG.KB_SCALE;
     return Math.min(total, GAME_CONFIG.KB_MAX);
   }

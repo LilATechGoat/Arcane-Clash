@@ -479,8 +479,9 @@ class BaseCharacter {
       );
     });
     this.scene.time.delayedCall(t, () => {
-      this.isAttacking    = false;
-      this._attackCooldown = 0;
+      this.isAttacking     = false;
+      // Recovery window — prevents attack spamming
+      this._attackCooldown = GAME_CONFIG.ATTACK_RECOVERY_MS || 220;
     });
   }
 

@@ -54,8 +54,9 @@ const GAME_CONFIG = {
   DI_STRENGTH:        0.12,
 
   // ── Attack timing multipliers ────────────────────────────
-  ATTACK_STARTUP_MULT:  0.5,    // slightly more startup = attacks feel committed
-  ATTACK_COOLDOWN_MULT: 0.6,    // more end-lag = punishable on whiff
+  ATTACK_STARTUP_MULT:  0.5,
+  ATTACK_COOLDOWN_MULT: 0.6,
+  ATTACK_RECOVERY_MS:   220,    // ms of cooldown after every attack ends — prevents spam
 
   // ── Hitstop (freeze frames at 60 fps) ───────────────────
   HITSTOP_LIGHT:       4,    // more hitstop = satisfying impact
