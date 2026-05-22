@@ -132,7 +132,15 @@ class NetworkManager {
             ri.held  = data.held  || {};
             ri.axisX = data.axisX ?? 0;
             ri.axisY = data.axisY ?? 0;
+            if (data.px !== undefined) {
+              ri.px = data.px; ri.py = data.py;
+              ri.pvx = data.pvx; ri.pvy = data.pvy;
+            }
           }
+        } else if (data.t === 'hit') {
+          // Guest confirmed a hit — store it so GameScene can apply it
+          this._pendingHits = this._pendingHits || [];
+          this._pendingHits.push({ ...data, fromSlot: slot });
         }
       });
 
@@ -206,9 +214,16 @@ class NetworkManager {
 
   // ── Game phase ────────────────────────────────────────────────────────────
 
-  sendInput(axisX, axisY, held) {
+  sendInput(axisX, axisY, held, px, py, pvx, pvy) {
     if (this._hostConn?.open) {
-      this._hostConn.send({ t:'input', axisX, axisY, held });
+      this._hostConn.send({ t:'input', axisX, axisY, held, px, py, pvx, pvy });
+    }
+  }
+
+  // Guest tells host: "I landed a hit on targetSlot"
+  sendHitEvent(targetSlot, damage, kbX, kbY, type) {
+    if (this._hostConn?.open) {
+      this._hostConn.send({ t:'hit', targetSlot, damage, kbX: Math.round(kbX), kbY: Math.round(kbY), type });
     }
   }
 

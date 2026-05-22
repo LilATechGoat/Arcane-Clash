@@ -16,7 +16,8 @@
       "PowerShell(node --check \"C:\\\\Users\\\\andre\\\\Downloads\\\\Phaser_Game\\\\src\\\\scenes\\\\GameScene.js\" 2>&1; Write-Host \"Exit: $LASTEXITCODE\")",
       "Bash(git add *)",
       "Bash(git commit -m 'Fix bidirectional damage: restore combat on guest, skip damage/knockback locally only *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git commit -m 'Fix guest damage: send confirmed hit events to host instead of relying on host-side detection *)"
     ]
   }
 }

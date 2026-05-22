@@ -114,19 +114,23 @@ class InputManager {
 
   // Gather local held state and send over network each frame
   // Always reads keyboard 0 (WASD) since online local player uses keyboard override → 0
-  sendNetworkInput(net, localPlayerId) {
+  sendNetworkInput(net, localPlayerId, localChar) {
     const kbId = this._kbOverride[localPlayerId] ?? localPlayerId;
     const map  = this._actionMap[kbId] || this._actionMap[0] || {};
     const held = {};
     for (const action of Object.keys(map)) {
       held[action] = this.rawKeys[map[action]]?.isDown || false;
     }
-    // Compute axes from raw keys
     const l = held.left || false, r = held.right || false;
     const u = held.up   || false, d = held.down  || false;
     const ax = (r && !l) ? 1 : (l && !r) ? -1 : 0;
     const ay = (d && !u) ? 1 : (u && !d) ? -1 : 0;
-    net.sendInput(ax, ay, held);
+    // Also send actual position so host can correct guest char before hit detection
+    const px  = localChar ? Math.round(localChar.x)     : undefined;
+    const py  = localChar ? Math.round(localChar.y)     : undefined;
+    const pvx = localChar ? Math.round(localChar.vel?.x) : undefined;
+    const pvy = localChar ? Math.round(localChar.vel?.y) : undefined;
+    net.sendInput(ax, ay, held, px, py, pvx, pvy);
   }
 
   isHeld(playerId, action) {

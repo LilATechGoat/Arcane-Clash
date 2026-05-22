@@ -91,14 +91,20 @@ class GameScene extends Phaser.Scene {
       if (char?.renderer) char.renderer.flashHit();
     };
 
-    // Override _applyHit: guests skip damage/knockback (host authoritative),
-    // but still fire flash + VFX for local feedback
     const origApplyHit = this.combatSystem._applyHit.bind(this.combatSystem);
     this.combatSystem._applyHit = (hb, target) => {
       if (this._mode === 'online' && !this._netIsHost) {
-        // Guest: visual feedback only — no damage/knockback locally
+        // Guest: show feedback locally AND notify host about the hit
         if (target.renderer) target.renderer.flashHit();
         if (this.playHitVFX) this.playHitVFX(target.x, target.y - 20, hb.type, hb.owner);
+        // Send confirmed hit to host for authoritative damage application
+        const rad = Phaser.Math.DegToRad(hb.kbAngle || 0);
+        const totalKB = (hb.kbBase * 0.18 + hb.kbScale * Math.pow(Math.max(target.damage,0), 1.4) / 38) * (GAME_CONFIG.KB_SCALE || 1);
+        this._netMgr?.sendHitEvent(
+          target.playerId, hb.damage,
+          Math.cos(rad) * totalKB, -Math.sin(rad) * totalKB,
+          hb.type
+        );
         return;
       }
       origApplyHit(hb, target);
@@ -109,19 +115,48 @@ class GameScene extends Phaser.Scene {
   update(time, delta) {
     const dt = Math.min(delta / 1000, 0.05);
     this.inputMgr.update(delta);
-    // Bot thinks before the character acts
     if (this._bot) this._bot.update(dt, this.p2, this.p1);
 
-    // Network sync
+    // Host: reconcile guest positions from received input packets before physics
+    if (this._mode === 'online' && this._netIsHost && this._netMgr) {
+      this.players.forEach((ch, i) => {
+        if (ch.playerId === this._localSlot) return;
+        const ri = this._netMgr._remoteInputs[ch.playerId];
+        if (ri?.px !== undefined) {
+          ch.x = ri.px; ch.y = ri.py;
+          ch.vel.x = ri.pvx; ch.vel.y = ri.pvy;
+        }
+      });
+    }
+
+    this.physicsSys.update(dt);
+    this.p1.update(dt);
+    this.p2.update(dt);
+    this.combatSystem.update();
+    this._tickAmbient(time);
+
     if (this._mode === 'online' && this._netMgr?.isConnected) {
       if (this._netIsHost) {
-        // Host: send local inputs + broadcast authoritative state
-        this.inputMgr.sendNetworkInput(this._netMgr, this._localSlot);
+        // Apply hit events confirmed by guests
+        const pending = this._netMgr._pendingHits;
+        if (pending?.length) {
+          this._netMgr._pendingHits = [];
+          pending.forEach(h => {
+            const target = this.players.find(p => p.playerId === h.targetSlot);
+            if (target && !target.isDead && !target.isRespawning && !target.isInvulnerable) {
+              target.damage += h.damage;
+              target.receiveKnockback(h.kbX, h.kbY);
+              if (target.renderer) target.renderer.flashHit();
+            }
+          });
+        }
+        const localChar = this.players.find(p => p.playerId === this._localSlot);
+        this.inputMgr.sendNetworkInput(this._netMgr, this._localSlot, localChar);
         this._netMgr.sendStateToAll(this.players);
       } else {
-        // Guest: send local inputs to host
-        this.inputMgr.sendNetworkInput(this._netMgr, this._localSlot);
-        // Apply buffered host state after physics
+        const localChar = this.players.find(p => p.playerId === this._localSlot);
+        this.inputMgr.sendNetworkInput(this._netMgr, this._localSlot, localChar);
+        // Apply buffered host state
         const s = this._netMgr.pendingState;
         if (s) {
           this._netMgr.pendingState = null;
@@ -132,7 +167,6 @@ class GameScene extends Phaser.Scene {
             const prevAnim = ch.renderer?.state || 'idle';
             const isRemote = ch.playerId !== this._localSlot;
 
-            // Only sync animation for remote chars — local player keeps their own animation
             this._applyNetState(ch, cd.x, cd.y, cd.vx, cd.vy, cd.d, cd.s, cd.f, isRemote ? cd.a : null);
 
             // Hit VFX when damage increases
@@ -141,7 +175,7 @@ class GameScene extends Phaser.Scene {
               this.playHitVFX(ch.x, ch.y - 20, htype, this.players.find(p => p !== ch));
             }
 
-            // Attack VFX when a REMOTE character starts a new attack
+            // Attack VFX on remote char state transition
             const isAttackAnim = cd.a && cd.a.startsWith('attack');
             const wasAttacking = prevAnim && prevAnim.startsWith('attack');
             if (isRemote && isAttackAnim && !wasAttacking && ch._emitKi) {
@@ -154,11 +188,6 @@ class GameScene extends Phaser.Scene {
         }
       }
     }
-    this.physicsSys.update(dt);
-    this.p1.update(dt);
-    this.p2.update(dt);
-    this.combatSystem.update();
-    this._tickAmbient(time);
   }
 
   /**
