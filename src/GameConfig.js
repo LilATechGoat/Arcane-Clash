@@ -14,24 +14,24 @@ const GAME_CONFIG = {
 
   // ── World Physics ────────────────────────────────────────
   /** Downward gravity applied to all characters (px/s²) */
-  GRAVITY:            2200,
+  GRAVITY:            3200,   // heavier gravity = less floaty, more Smash-like
   /** Terminal fall speed cap (px/s) */
-  MAX_FALL_SPEED:     950,
+  MAX_FALL_SPEED:     1300,   // faster falling
   /** Multiplier applied when fast-falling (down + airborne + falling) */
-  FAST_FALL_MULT:     2.2,
+  FAST_FALL_MULT:     1.6,    // less extreme fast-fall since gravity is already high
   /** Ground friction: velocity multiplied this per frame */
-  GROUND_FRICTION:    0.65,
+  GROUND_FRICTION:    0.55,   // snappier stops
   /** Air horizontal drag: velocity multiplied this per frame */
-  AIR_DRAG:           0.97,
+  AIR_DRAG:           0.94,   // less air drift
 
   // ── Movement ────────────────────────────────────────────
-  WALK_SPEED:         290,    // px/s
-  JUMP_VELOCITY:     -760,    // px/s (negative = upward)
-  DOUBLE_JUMP_VEL:   -680,
-  AIR_SPEED:          270,    // max horizontal speed while airborne
-  WALL_SLIDE_MAX:      85,    // max fall speed while wall-sliding
-  WALL_JUMP_X:        390,    // horizontal launch speed on wall jump
-  WALL_JUMP_Y:       -710,    // vertical launch speed on wall jump
+  WALK_SPEED:         340,    // px/s — snappier ground movement
+  JUMP_VELOCITY:     -920,    // stronger jump to compensate for higher gravity
+  DOUBLE_JUMP_VEL:   -820,
+  AIR_SPEED:          310,    // px/s
+  WALL_SLIDE_MAX:      85,
+  WALL_JUMP_X:        420,
+  WALL_JUMP_Y:       -820,
 
   // ── Air Dodge ────────────────────────────────────────────
   AIR_DODGE_SPEED:    720,    // launch speed
@@ -47,26 +47,25 @@ const GAME_CONFIG = {
 
   // ── Knockback ────────────────────────────────────────────
   /** Global knockback multiplier — raise to make the game more explosive */
-  KB_SCALE:            1.0,
+  KB_SCALE:            1.3,   // more explosive knockback like Smash
   /** Hard cap on knockback launch speed (px/s) */
-  KB_MAX:            2500,
+  KB_MAX:            2800,
   /** Directional Influence strength (0 = none, 0.15 = strong) */
-  DI_STRENGTH:        0.10,
+  DI_STRENGTH:        0.12,
 
   // ── Attack timing multipliers ────────────────────────────
-  // Reduce without touching every character file.
-  ATTACK_STARTUP_MULT:  0.45,   // multiplied against the hitbox delay arg
-  ATTACK_COOLDOWN_MULT: 0.55,   // multiplied against the total duration arg
+  ATTACK_STARTUP_MULT:  0.5,    // slightly more startup = attacks feel committed
+  ATTACK_COOLDOWN_MULT: 0.6,    // more end-lag = punishable on whiff
 
   // ── Hitstop (freeze frames at 60 fps) ───────────────────
-  HITSTOP_LIGHT:       3,
-  HITSTOP_HEAVY:       7,
-  HITSTOP_SPECIAL:     5,
-  HITSTOP_GRAB:        2,
+  HITSTOP_LIGHT:       4,    // more hitstop = satisfying impact
+  HITSTOP_HEAVY:      10,
+  HITSTOP_SPECIAL:     7,
+  HITSTOP_GRAB:        3,
 
   // ── Camera Shake ─────────────────────────────────────────
-  SHAKE_HEAVY:   { duration: 180, intensity: 0.013 },
-  SHAKE_SPECIAL: { duration: 260, intensity: 0.020 },
+  SHAKE_HEAVY:   { duration: 220, intensity: 0.018 },
+  SHAKE_SPECIAL: { duration: 300, intensity: 0.025 },
 
   // ── Stocks & Respawn ────────────────────────────────────
   STARTING_STOCKS:     3,

@@ -17,7 +17,8 @@
       "Bash(git add *)",
       "Bash(git commit -m 'Fix bidirectional damage: restore combat on guest, skip damage/knockback locally only *)",
       "Bash(git push *)",
-      "Bash(git commit -m 'Fix guest damage: send confirmed hit events to host instead of relying on host-side detection *)"
+      "Bash(git commit -m 'Fix guest damage: send confirmed hit events to host instead of relying on host-side detection *)",
+      "Bash(git commit -m 'Tune physics for Smash Bros feel: heavier gravity, stronger knockback, more hitstop *)"
     ]
   }
 }
